@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml>
+  <Document>
+    <Placemark>
+      <name>【工区名称】作业范围</name>
+      <visibility>1</visibility>
+      <Style>
+        <LineStyle>
+          <color>FF0000FF</color>
+          <width>3</width>
+        </LineStyle>
+        <PolyStyle>
+          <color>6600FFFF</color>
+          <fill>1</fill>
+          <outline>1</outline>
+        </PolyStyle>
+      </Style>
+      <Polygon>
+        <tessellate>1</tessellate>
+        <altitudeMode>clampToGround</altitudeMode>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>116,39,0 116.01,39,0 116.01,39.01,0 116,39.01,0 116,39,0</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>

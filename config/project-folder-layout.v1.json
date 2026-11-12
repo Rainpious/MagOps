@@ -1,0 +1,400 @@
+{
+  "schema_version": "folder-layout-1",
+  "display_name": "航磁项目目录结构与资料流转初版",
+  "source_basis": "外蒙航磁项目目录结构评估报告_v1.0_20260904.md",
+  "principles": [
+    "项目层负责治理和跨工区汇总，工区层负责完整生产闭环。",
+    "一级目录按业务职责/业务阶段分类，不按软件类型或扩展名分类。",
+    "Oasis/GIS 等工程文件族整体随所属业务阶段归档。",
+    "同一业务文件只保留一个事实位置，其他层通过登记、路径、哈希或交付信息引用。",
+    "业务目录按需创建：初始化项目时不预先建立；只有写入文件时才创建目标目录。",
+    "99_待整理与待确认只用于暂时无法判断归属的资料，不作为默认临时目录。",
+    "航线设计资料按 01_PLY工区边界 → 02_自动航线端点 / 02_KML分区 → 03_连接处理 → 04_编辑工程 → 05_设计航线 归类；KML 子区航线必须由母区测线裁切，不得对子区独立起算。"
+  ],
+  "project_folders": [
+    {
+      "key": "project.management",
+      "relative_path": "00_项目管理",
+      "title": "项目管理",
+      "purpose": "项目管理数据、规范、状态、审计与交接。"
+    },
+    {
+      "key": "project.basis",
+      "relative_path": "01_项目依据与公共资料",
+      "title": "项目依据与公共资料",
+      "purpose": "合同、技术要求、公共依据和跨工区共同使用资料。"
+    },
+    {
+      "key": "project.registry",
+      "relative_path": "02_资料登记与字段确认",
+      "title": "资料登记与字段确认",
+      "purpose": "项目级资料登记、字段定义和确认结果。"
+    },
+    {
+      "key": "project.spatial",
+      "relative_path": "03_总体空间框架与工区划分",
+      "title": "总体空间框架与工区划分",
+      "purpose": "总体空间基准、工区划分和项目级空间框架。"
+    },
+    {
+      "key": "project.plan",
+      "relative_path": "04_项目计划与资源协调",
+      "title": "项目计划与资源协调",
+      "purpose": "项目计划、资源、人员和跨工区协调。"
+    },
+    {
+      "key": "project.quality",
+      "relative_path": "05_质量安全与生产门禁",
+      "title": "质量安全与生产门禁",
+      "purpose": "项目级质量、安全、门禁规则及核验。"
+    },
+    {
+      "key": "project.aggregate",
+      "relative_path": "06_跨工区数据汇总",
+      "title": "跨工区数据汇总",
+      "purpose": "仅汇总已通过准入/门禁的工区成果。"
+    },
+    {
+      "key": "project.figures",
+      "relative_path": "07_项目综合图件",
+      "title": "项目综合图件",
+      "purpose": "跨工区综合图件和项目级专题图。"
+    },
+    {
+      "key": "project.delivery",
+      "relative_path": "08_项目总报告与交付",
+      "title": "项目总报告与交付",
+      "purpose": "项目总报告、交付编排和最终交付。"
+    },
+    {
+      "key": "project.tools",
+      "relative_path": "09_公共工具与模板",
+      "title": "公共工具与模板",
+      "purpose": "项目公共工具、模板和稳定参考资源。"
+    },
+    {
+      "key": "project.workareas",
+      "relative_path": "10_工区",
+      "title": "工区",
+      "purpose": "各独立工区生产工作区。"
+    },
+    {
+      "key": "project.pending",
+      "relative_path": "99_待整理与待确认",
+      "title": "待整理与待确认",
+      "purpose": "暂时无法判断归属且待确认的项目级资料。"
+    }
+  ],
+  "workarea_folders": [
+    {
+      "key": "workarea.management",
+      "relative_path": "00_项目管理",
+      "title": "项目管理",
+      "purpose": "工区管理、索引、记录和局部门禁信息。"
+    },
+    {
+      "key": "workarea.raw",
+      "relative_path": "01_原始资料",
+      "title": "原始资料",
+      "purpose": "从外部接收/采集的原始文件及其只读归档副本。"
+    },
+    {
+      "key": "workarea.registry",
+      "relative_path": "02_资料登记与字段确认",
+      "title": "资料登记与字段确认",
+      "purpose": "工区资料登记、字段确认和数据字典。"
+    },
+    {
+      "key": "workarea.coordinate",
+      "relative_path": "03_坐标与空间资料",
+      "title": "坐标与空间资料",
+      "purpose": "坐标转换、投影、边界核验、空间检查及其工程文件族。"
+    },
+    {
+      "key": "workarea.route",
+      "relative_path": "04_航线设计与任务文件",
+      "title": "航线设计与任务文件",
+      "purpose": "航线边界 PLY、自动端点、连接处理中间数据、编辑工程、KML/CSV 设计航线及后续任务文件；KMZ 当前冻结。"
+    },
+    {
+      "key": "workarea.field",
+      "relative_path": "05_外业记录与采集成果",
+      "title": "外业记录与采集成果",
+      "purpose": "飞行、日变站、现场记录、采集成果和外业初检工程。"
+    },
+    {
+      "key": "workarea.processing",
+      "relative_path": "06_数据处理",
+      "title": "数据处理",
+      "purpose": "日变改正、分线、飞高、偏航、噪声、检查线、磁处理及处理工程文件族。"
+    },
+    {
+      "key": "workarea.figures",
+      "relative_path": "07_图件",
+      "title": "图件",
+      "purpose": "GIS/Oasis 制图、专题图和制图工程文件族。"
+    },
+    {
+      "key": "workarea.report",
+      "relative_path": "08_报告编译",
+      "title": "报告编译",
+      "purpose": "工区报告编译、交付编排及其工程文件族。"
+    },
+    {
+      "key": "workarea.pending",
+      "relative_path": "99_待整理与待确认",
+      "title": "待整理与待确认",
+      "purpose": "暂时无法判断归属的工区资料。"
+    }
+  ],
+  "operations": [
+    {
+      "key": "project_terrain",
+      "scope": "project",
+      "folder_key": "project.basis",
+      "subfolder": "地形资料",
+      "title": "项目地形 GeoTIFF",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "raw_import",
+      "scope": "workarea",
+      "folder_key": "workarea.raw",
+      "subfolder": "导入归档/{yyyyMMdd_HHmmssfff}",
+      "title": "原始资料导入归档",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "coordinate_export",
+      "scope": "workarea",
+      "folder_key": "workarea.coordinate",
+      "subfolder": "01_坐标转换CSV",
+      "title": "坐标转换 CSV",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "coordinate_kml_range",
+      "scope": "workarea",
+      "folder_key": "workarea.coordinate",
+      "subfolder": "02_范围KML",
+      "title": "坐标转换范围 KML",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "coordinate_spatial_export",
+      "scope": "workarea",
+      "folder_key": "workarea.coordinate",
+      "subfolder": "03_空间文件",
+      "title": "KML/GPX 等空间文件",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "coordinate_oasis_ply",
+      "scope": "workarea",
+      "folder_key": "workarea.route",
+      "subfolder": "01_PLY工区边界",
+      "title": "绘制航线工区边界 PLY",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "route_endpoint_design",
+      "scope": "workarea",
+      "folder_key": "workarea.route",
+      "subfolder": "02_自动航线端点",
+      "title": "PLY 自动绘制航线端点",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "route_kml_subdivision",
+      "scope": "workarea",
+      "folder_key": "workarea.route",
+      "subfolder": "02_KML分区",
+      "title": "KML 分区、母区端点与子区对齐端点",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "route_preprocess",
+      "scope": "workarea",
+      "folder_key": "workarea.route",
+      "subfolder": "03_连接处理",
+      "title": "航线连接处理与凹形断线中间数据",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "route_export",
+      "scope": "workarea",
+      "folder_key": "workarea.route",
+      "subfolder": "05_设计航线",
+      "title": "设计航线 KML/CSV 输出根目录（KMZ 冻结）",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "route_kml_import",
+      "scope": "workarea",
+      "folder_key": "workarea.route",
+      "subfolder": "05_设计航线/03_外部导入KML",
+      "title": "外部设计航线 KML 导入",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "route_project",
+      "scope": "workarea",
+      "folder_key": "workarea.route",
+      "subfolder": "04_编辑工程",
+      "title": "航线编辑工程 JSON",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "field_evidence",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "现场证据",
+      "title": "外业现场证据",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "equipment_checklist_export",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "出发整备/设备清点",
+      "title": "设备清点导出",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "equipment_test_export",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "出发整备/设备测试",
+      "title": "设备测试报告",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "field_data_integration",
+      "scope": "workarea",
+      "folder_key": "workarea.processing",
+      "subfolder": "01_磁测数据整理",
+      "title": "UAV / GSM-19T 完整整合、识别清单与质量检查",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "processing_diurnal",
+      "scope": "workarea",
+      "folder_key": "workarea.processing",
+      "subfolder": "02_日变改正",
+      "title": "MagOps 原生日变改正完整成果",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "field_gemlink_bridge",
+      "scope": "workarea",
+      "folder_key": "workarea.processing",
+      "subfolder": "90_GEMLink兼容",
+      "title": "GEMLink 5.4.8.1 黄金对照与兼容核查",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "field_daily_progress",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "当日任务进度",
+      "title": "外业当日任务进度与简报",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "field_takeoff_export",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "推荐起飞点",
+      "title": "推荐起飞点坐标与 GPX",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "flight_evidence",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "飞行架次",
+      "title": "飞行架次记录与证据",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "base_station_evidence",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "日变站",
+      "title": "日变站记录与证据",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "daily_log_export",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "每日日志",
+      "title": "每日日志导出",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "issue_evidence",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "问题与处置",
+      "title": "问题记录与处置证据",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "field_qc_export",
+      "scope": "workarea",
+      "folder_key": "workarea.field",
+      "subfolder": "质量检查",
+      "title": "外业当日 QC 记录",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "processing_excel",
+      "scope": "workarea",
+      "folder_key": "workarea.processing",
+      "subfolder": "Excel处理",
+      "title": "Excel/CSV 表格处理结果",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "processing_oasis",
+      "scope": "workarea",
+      "folder_key": "workarea.processing",
+      "subfolder": "Oasis处理",
+      "title": "Oasis/Geosoft GDB 数据库处理结果",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "processing_analysis",
+      "scope": "workarea",
+      "folder_key": "workarea.processing",
+      "subfolder": "分析结果",
+      "title": "数据处理/分析输出",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "figure_export",
+      "scope": "workarea",
+      "folder_key": "workarea.figures",
+      "subfolder": "输出",
+      "title": "图件输出",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "report_export",
+      "scope": "workarea",
+      "folder_key": "workarea.report",
+      "subfolder": "输出",
+      "title": "报告编译输出",
+      "create_policy": "on_write"
+    },
+    {
+      "key": "project_handoff",
+      "scope": "project",
+      "folder_key": "project.management",
+      "subfolder": "magops",
+      "title": "项目交接与管理输出",
+      "create_policy": "on_write"
+    }
+  ]
+}

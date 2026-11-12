@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "DocumentFormat.OpenXml": {
+        "type": "Direct",
+        "requested": "[3.5.1, )",
+        "resolved": "3.5.1",
+        "contentHash": "zxdOf5VVCe/uNklbRhj8dVBzQGj3DoqkUuqOp9cAZVuN8mNYDjof1lvSQA2OQNr8Ptc9d7pbA7Azq/ReaI3FpA==",
+        "dependencies": {
+          "DocumentFormat.OpenXml.Framework": "3.5.1"
+        }
+      },
+      "DocxTemplater": {
+        "type": "Direct",
+        "requested": "[2.9.7, )",
+        "resolved": "2.9.7",
+        "contentHash": "cAsqtPBe0dRm1XnDTXE7yQdwFE1+IJd/QDDr0nEM0/OArtEqheJf8hDiDsWDTLDJvF7j+i7bXSH/5NGlfNY38Q==",
+        "dependencies": {
+          "DocumentFormat.OpenXml": "[3.5.1, 4.0.0)",
+          "DynamicExpresso.Core": "[2.19.3, 3.0.0)"
+        }
+      },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
+      },
+      "DocumentFormat.OpenXml.Framework": {
+        "type": "Transitive",
+        "resolved": "3.5.1",
+        "contentHash": "U5txtc3ORno73xQx9Lf2gWzfaSZnZwKHfLkTAslhlew9lxe5XbUiCt0dY1fHeAf8yRqszUAe5i/+xLC9R/Xfsw==",
+        "dependencies": {
+          "System.IO.Packaging": "10.0.2"
+        }
+      },
+      "DynamicExpresso.Core": {
+        "type": "Transitive",
+        "resolved": "2.19.3",
+        "contentHash": "84cSMvhcLON2JUQshIvcEAGMtE5rI7FOlcCT0QC42XPZ12A//qDHWKrB5QUfRrQQlDZZZ7TiLAm7mcrywygmpg=="
+      },
+      "System.IO.Packaging": {
+        "type": "Transitive",
+        "resolved": "10.0.2",
+        "contentHash": "JTpM4z0wpoIHHDvlCU27HsXo+zVnpWib94HXQpzzr+jc/P9NYf4w353AK4MXyGq/grm1mbLi7eXsOsDU8sGmNg=="
+      },
+      "magops.core": {
+        "type": "Project"
+      },
+      "magops.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "MagOps.Core": "[1.0.0, )"
+        }
+      }
+    },
+    "net10.0/win-x64": {}
+  }
+}

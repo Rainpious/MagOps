@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>MagOps.Desktop</RootNamespace>
+    <AssemblyName>MagOps</AssemblyName>
+    <Version>0.9.55</Version>
+    <FileVersion>0.9.55</FileVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MagOps.Core\MagOps.Core.csproj" />
+    <ProjectReference Include="..\MagOps.Infrastructure\MagOps.Infrastructure.csproj" />
+    <ProjectReference Include="..\MagOps.Application\MagOps.Application.csproj" />
+    <ProjectReference Include="..\MagOps.Reporting\MagOps.Reporting.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>MagOps.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MagOps.Core\MagOps.Core.csproj" />
+    <ProjectReference Include="..\MagOps.Infrastructure\MagOps.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

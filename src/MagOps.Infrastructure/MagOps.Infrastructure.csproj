@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>MagOps.Infrastructure</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MagOps.Core\MagOps.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\project-folder-layout.v1.json" LogicalName="MagOps.Infrastructure.Resources.project-folder-layout.v1.json" />
+    <EmbeddedResource Include="..\..\config\geomagnetics\igrf.dat" LogicalName="MagOps.Infrastructure.Resources.Geomagnetics.igrf.dat" />
+    <EmbeddedResource Include="Resources\KmlTemplates\边缘-天青_填充-天青.kml" LogicalName="MagOps.Infrastructure.Resources.KmlTemplates.边缘-天青_填充-天青.kml" />
+    <EmbeddedResource Include="Resources\KmlTemplates\边缘-红色_填充-黄色.kml" LogicalName="MagOps.Infrastructure.Resources.KmlTemplates.边缘-红色_填充-黄色.kml" />
+    <EmbeddedResource Include="Resources\RouteKmlTemplates\航线-天青_DJI极简.kml" LogicalName="MagOps.Infrastructure.Resources.RouteKmlTemplates.航线-天青_DJI极简.kml" />
+  </ItemGroup>
+</Project>

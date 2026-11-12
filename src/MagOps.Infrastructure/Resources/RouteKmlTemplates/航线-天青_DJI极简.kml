@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml>
+  <Document>
+    <Placemark>
+      <name>架次00</name>
+      <visibility>1</visibility>
+      <Style>
+        <LineStyle>
+          <color>ff80ff80</color>
+          <width>0.800000011920929</width>
+        </LineStyle>
+      </Style>
+      <ExtendedData>
+        <Data name="LinePattern">
+          <value>65535</value>
+        </Data>
+      </ExtendedData>
+      <LineString>
+        <altitudeMode>absolute</altitudeMode>
+        <coordinates>
+116.000000,39.000000,0.00
+116.100000,39.100000,0.00
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>

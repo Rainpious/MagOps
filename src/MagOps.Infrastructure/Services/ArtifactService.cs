@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using MagOps.Core;
@@ -253,7 +253,7 @@ public sealed class ArtifactService
         {
             string rel = Path.GetRelativePath(root, file).Replace('\\', '/');
             string[] parts = rel.Split('/');
-            if (parts.Any(p => AppConstants.ExcludedDirectories.Contains(p))) continue;
+            if (parts.Any(p => p == ".magops" || AppConstants.ExcludedDirectories.Contains(p)) || rel == "project.json") continue;
             if (parts.Length >= 2 && parts[0] == "00_项目管理" && parts[1] == "magops") continue;
             string identityTarget = file.EndsWith(GeneratedArtifactIdentity.Suffix, StringComparison.OrdinalIgnoreCase)
                 ? file[..^GeneratedArtifactIdentity.Suffix.Length] : file;
@@ -861,7 +861,7 @@ public sealed class ArtifactService
             }
         }
 
-        if (normalized.StartsWith("10_工区/", StringComparison.OrdinalIgnoreCase) ||
+        if (normalized.StartsWith("工区/", StringComparison.OrdinalIgnoreCase) || normalized.StartsWith("10_工区/", StringComparison.OrdinalIgnoreCase) ||
             normalized.StartsWith("10_子工区/", StringComparison.OrdinalIgnoreCase))
         {
             return ("", "REVIEW_REQUIRED");

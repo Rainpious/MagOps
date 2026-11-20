@@ -51,7 +51,7 @@ public sealed partial class MainForm
             if (string.IsNullOrWhiteSpace(CurrentWorkareaId)) throw new InvalidOperationException("请先选择工区。");
             string folder = input.Text, map = mapping.Text;
             string output = Path.Combine(EnsureManagedOutputDirectory("processing_diurnal", "地面磁测试算"),
-                "地面试算_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N")[..6]);
+                "地面试算_" + DateTime.Now.ToString("yyyyMMdd-HHmmssfff"));
             var context = new GeneratedArtifactContext(_workspace.GetWorkspace(Root).ProjectId, CurrentWorkareaId);
             var run = _processingRuns.Begin(Root, "ground_diurnal_review", context);
             try
@@ -62,6 +62,12 @@ public sealed partial class MainForm
                 var ids = result.Result!.Files.Where(p => !p.EndsWith(GeneratedArtifactIdentity.Suffix, StringComparison.OrdinalIgnoreCase))
                     .Select(p => _artifacts.RegisterGeneratedFile(Root, p, "ground_diurnal_review").ArtifactId).ToArray();
                 _processingRuns.Complete(Root, run.ProcessingRunId, ids);
+                if (_saveElsewhere || !new GlobalWorkspaceService().Load().AutomaticOutput) {
+                    string destination = Path.Combine(ChooseCustomOutputDirectory("processing_diurnal", "另存地面试算"), Path.GetFileName(output));
+                    foreach (string file in result.Result.Files.Where(p => !p.EndsWith(GeneratedArtifactIdentity.Suffix, StringComparison.OrdinalIgnoreCase)))
+                        ArtifactCopyService.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+                    output = destination;
+                }
                 RememberInputs();
                 FileInteractions.For(this, "ground-output", "output").OutputSucceeded(output, directory: true);
                 summary.Text = $"{result.Result.Status}\r\n{output}\r\n记录 {result.Result.RecordCount}；点分组 {result.Result.PointGroupCount}。\r\n需复核，非已验收生产成果。";

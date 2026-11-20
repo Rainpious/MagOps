@@ -19,3 +19,7 @@ Policy: https://earth.jaxa.jp/en/data/policy/
 ## File formats and trademarks
 
 KML, DJI and Ovi references identify interoperability targets, not affiliation or endorsement. Public KML examples are synthetic. No vendor KMZ template is redistributed.
+
+## Word report components
+
+Word report generation uses the MIT-licensed Open XML SDK, DocxTemplater, Dynamic Expresso and System.IO.Packaging. See the NuGet lockfile for versions and the licenses directory in the binary distribution for the notices.

@@ -38,12 +38,13 @@ public sealed class WorkspaceService
             WorkspaceId = Slug(display),
             DisplayName = display,
             Root = root,
+            WorkareaRoot = ProjectPaths.Compact(root) ? "工区" : "10_工区",
             Status = "PRECHECK",
             CreatedAt = now,
             UpdatedAt = now,
             Gates = AppConstants.GateNames.ToDictionary(x => x, _ => "PENDING"),
             GateRecords = new(),
-            Notes = ["报告编译暂时搁置；本目录只管理作业过程和资料状态。"]
+            Notes = ["报告支持草稿装配；正式交付前须核对资料、统计范围并完成审阅。"]
         };
         _store.Write(workspacePath, workspace);
 
@@ -159,7 +160,7 @@ public sealed class WorkspaceService
     {
         root = Path.GetFullPath(root);
         var candidates = new List<(string path, string note)>();
-        string standard = Path.Combine(root, "10_工区");
+        string standard = Path.Combine(root, ProjectPaths.Compact(root) ? "工区" : "10_工区");
         string legacy = Path.Combine(root, "10_子工区");
         string scan = Directory.Exists(standard) ? standard : legacy;
 
@@ -307,7 +308,7 @@ public sealed class WorkspaceService
             return existing;
 
         string workareaRoot = string.IsNullOrWhiteSpace(workspace.WorkareaRoot)
-            ? "10_工区"
+            ? (ProjectPaths.Compact(root) ? "工区" : "10_工区")
             : workspace.WorkareaRoot.Trim().Trim('/', '\\');
         string workareaDirectory = Path.Combine(root, workareaRoot, id);
         bool createdBaseDirectory = !Directory.Exists(workareaDirectory);

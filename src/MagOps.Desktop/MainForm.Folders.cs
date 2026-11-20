@@ -693,7 +693,7 @@ public sealed partial class MainForm
                 StringComparison.OrdinalIgnoreCase) &&
             IsProjectInitialized())
         {
-            managedDirectory = _folderLayout.EnsureOperationDirectory(
+            managedDirectory = _folderLayout.ResolveOperationDirectory(
                 Root,
                 operationKey);
         }
@@ -705,22 +705,29 @@ public sealed partial class MainForm
                      out string workarea,
                      out _))
         {
-            managedDirectory = _folderLayout.EnsureOperationDirectory(
+            managedDirectory = _folderLayout.ResolveOperationDirectory(
                 Root,
                 operationKey,
                 workarea);
 
-            _workspace.SyncWorkareas(Root);
-            RefreshWorkareaContextSelectors();
+
+        }
+
+        var global = new GlobalWorkspaceService();
+        var preferences = global.Load();
+        if (_saveElsewhere || (preferences.Root.Length > 0 && !preferences.AutomaticOutput)) managedDirectory = null;
+        else if (managedDirectory is null && preferences.Root.Length > 0) {
+            managedDirectory = global.Standalone(operationKey); Directory.CreateDirectory(managedDirectory);
         }
 
         if (!string.IsNullOrWhiteSpace(managedDirectory))
         {
+            Directory.CreateDirectory(managedDirectory);
             string managedPath =
                 Path.Combine(managedDirectory, safeName);
-            ConfirmOverwriteFilesIfNeeded(
-                [managedPath],
-                purpose);
+            if (preferences.Root.Length > 0 && preferences.AutomaticOutput)
+                managedPath = GlobalWorkspaceService.UniqueFile(managedPath);
+            else ConfirmOverwriteFilesIfNeeded([managedPath], purpose);
             return TrackFileOutput(managedPath, operationKey);
         }
 
@@ -792,6 +799,9 @@ public sealed partial class MainForm
         string operationKey,
         string purpose)
     {
+        var global = new GlobalWorkspaceService(); var preferences = global.Load();
+        if (_saveElsewhere || (preferences.Root.Length > 0 && !preferences.AutomaticOutput))
+            return ChooseCustomOutputDirectory(operationKey, purpose);
         FolderOperationEntry operation = _folderLayout.GetOperation(operationKey);
 
         if (operation.Scope.Equals(
@@ -822,6 +832,24 @@ public sealed partial class MainForm
             return managed;
         }
 
+        if (preferences.Root.Length > 0) {
+            string output = global.Standalone(operationKey); Directory.CreateDirectory(output); return output;
+        }
+        return ChooseCustomOutputDirectory(operationKey, purpose);
+    }
+
+    private DialogResult PrepareAutomaticSave(SaveFileDialog dialog, string operation)
+    {
+        var preferences = new GlobalWorkspaceService().Load();
+        if (preferences.Root.Length == 0 || !preferences.AutomaticOutput || _saveElsewhere)
+            return dialog.ShowDialog(this);
+        dialog.FileName = ResolveToolOutputFilePath(operation, dialog.Title, dialog.FileName, dialog.Filter, Path.GetExtension(dialog.FileName));
+        return DialogResult.OK;
+    }
+
+    private bool _saveElsewhere;
+    private string ChooseCustomOutputDirectory(string operationKey, string purpose)
+    {
         using var dialog = new FolderBrowserDialog
         {
             Description = purpose + "（临时使用：请选择输出文件夹）",

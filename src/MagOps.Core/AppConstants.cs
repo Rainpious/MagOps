@@ -1,9 +1,9 @@
-﻿namespace MagOps.Core;
+namespace MagOps.Core;
 
 public static class AppConstants
 {
     public const string SchemaVersion = "0.4";
-    public const string AppVersion = "0.9.55";
+    public const string AppVersion = "0.9.58";
 
     public static readonly string[] ProjectStatuses =
     [
@@ -53,6 +53,6 @@ public static class AppConstants
     public static readonly HashSet<string> ExcludedDirectories =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ".git", ".venv", "__pycache__", ".pytest_cache"
+            ".magops", ".git", ".venv", "__pycache__", ".pytest_cache"
         };
 }

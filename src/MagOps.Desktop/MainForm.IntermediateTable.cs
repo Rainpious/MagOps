@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using MagOps.Application;
 
 namespace MagOps.Desktop;
@@ -60,7 +60,7 @@ public sealed partial class MainForm
             if (snapshot is null) throw new InvalidOperationException("请先成功读取表格。");
             using var save = new SaveFileDialog { Filter = "JSON|*.json", FileName = "中间表格读取快照.json", OverwritePrompt = true };
             var history = FileInteractions.For(this, "intermediate-table-snapshot", "output"); history.Prepare(save);
-            if (save.ShowDialog(this) != DialogResult.OK) return;
+            if (PrepareAutomaticSave(save, "processing_excel") != DialogResult.OK) return;
             MagOps.Infrastructure.Services.AtomicFileWriter.Write(save.FileName, stream => { using var writer = new StreamWriter(stream, leaveOpen: true); writer.Write(snapshot); });
             RegisterGeneratedBusinessFile(save.FileName, "intermediate_table_snapshot"); history.OutputSucceeded(save.FileName);
         })));

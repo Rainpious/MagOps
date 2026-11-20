@@ -1,4 +1,4 @@
-namespace MagOps.Desktop;
+﻿namespace MagOps.Desktop;
 
 internal static class FeatureIds
 {
@@ -68,7 +68,7 @@ internal static class NavigationModel
         new(FeatureIds.ExcelProcessing, NavigationGroupIds.Processing, "数据处理", "Excel处理", 60, Frozen: true),
         new(FeatureIds.OasisProcessing, NavigationGroupIds.Processing, "数据处理", "Oasis处理", 70, Frozen: true),
         new(FeatureIds.QualityChecks, NavigationGroupIds.Results, "成果", "质量验算", 74),
-        new(FeatureIds.ReportCompilation, NavigationGroupIds.Results, "成果", "报告编写", 75, Frozen: true),
+        new(FeatureIds.ReportCompilation, NavigationGroupIds.Results, "成果", "报告编写", 75),
         new(FeatureIds.AnalysisTools, NavigationGroupIds.Tools, "工具", "分析工具", 80, Experimental: true, Frozen: true)
     ];
 

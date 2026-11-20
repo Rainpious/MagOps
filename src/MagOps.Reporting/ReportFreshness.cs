@@ -21,6 +21,7 @@ public static class ReportFreshness
             var snapshot = JsonSerializer.Deserialize<ReportSnapshot>(File.ReadAllText(snapshotPath), ReportInputStore.Json)
                 ?? throw new InvalidDataException("快照为空。");
             var changed = new List<string>(); var unreadable = new List<string>();
+            changed.AddRange(ReportSharedSources.Changes(root, area, snapshot.WorkareaId, snapshot.Inputs.SharedItems, snapshot.Inputs.ReportDate));
             foreach (var source in snapshot.Sources)
             {
                 try

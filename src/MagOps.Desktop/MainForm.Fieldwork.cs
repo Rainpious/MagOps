@@ -25,7 +25,7 @@ public sealed partial class MainForm
 
         root.Controls.Add(UiComponents.PageHeader(
             "出发整备",
-            "出发前只保留设备登记、清点、测试与放行判断；飞行架次、日变站、每日日志和现场问题位于“外业管理 → 现场记录”。"), 0, 0);
+            "维护项目、人员和设备报告资料，登记设备并完成清点、测试与放行判断；飞行架次、日变站、每日日志和现场问题位于“外业管理 → 现场记录”。"), 0, 0);
 
         var card = UiComponents.Card(new Padding(10));
         var equipmentLayout = new TableLayoutPanel
@@ -53,6 +53,12 @@ public sealed partial class MainForm
         buttons.Controls.Add(Button("新增设备", (_, _) => RunUi("新增设备", AddEquipment), UiButtonRole.Primary));
         buttons.Controls.Add(Button("删除设备", (_, _) => RunUi("删除设备", DeleteEquipment), UiButtonRole.Subtle));
         buttons.Controls.Add(Button("打开设备清点", (_, _) => RunUi("设备清点", OpenChecklist)));
+        buttons.Controls.Add(Button("报告资料字典", (_, _) => RunUi("报告资料字典", () =>
+        {
+            if (string.IsNullOrWhiteSpace(Root)) throw new InvalidOperationException("请先打开项目。");
+            using var dialog = new ProjectReportProfileDialog(Root);
+            if (dialog.ShowDialog(this) == DialogResult.OK) SetStatus("报告资料字典已保存，可在报告编写中引用。");
+        })));
         equipmentLayout.Controls.Add(buttons, 0, 1);
 
         GridFactory.SetEmptyText(

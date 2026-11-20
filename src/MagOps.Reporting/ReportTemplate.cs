@@ -7,7 +7,7 @@ namespace MagOps.Reporting;
 /// <summary>Versioned clean template; never reuses old project facts or conclusions.</summary>
 public static class ReportTemplate
 {
-    public const string Version = "magops-summary-template-3";
+    public const string Version = "magops-summary-template-4";
 
     public static void Create(string path)
     {
@@ -24,42 +24,42 @@ public static class ReportTemplate
                     new SpacingBetweenLines { After = "120", Line = "360", LineRule = LineSpacingRuleValues.Auto }))),
             Style("Title", "Title", "40", true), Style("Heading1", "heading 1", "30", true),
             Style("Heading2", "heading 2", "26", true));
-        body.Append(P("{{r.ProjectName}}", "Title"), P("{{r.WorkareaName}}航磁工作小结", "Title"),
-            P("报告草稿"), P("编写单位：{{r.Organization}}"), P("编写人：{{r.Author}}"), P("日期：{{r.ReportDate}}"),
+        body.Append(P(ReportFieldDictionary.Token("ProjectName"), "Title"), P(ReportFieldDictionary.Token("WorkareaName") + "航磁工作小结", "Title"),
+            P("报告草稿"), P("编写单位：" + ReportFieldDictionary.Token("Organization")), P("编写人：" + ReportFieldDictionary.Token("Author")), P("日期：" + ReportFieldDictionary.Token("ReportDate")),
             P("本报告依据所选处理用 CSV 及独立保存的资料编制。缺项与质量结论须经人工审核，草稿不代表正式验收。"),
             new Paragraph(new ParagraphProperties(new PageBreakBefore()), new Run(new Text("目录"))),
             new Paragraph(new SimpleField(new Run(new Text("在Word中更新目录域以生成章节与页码。"))) { Instruction = "TOC \\o \"1-2\" \\h \\z \\u" }),
             new Paragraph(new ParagraphProperties(new ParagraphStyleId { Val = "Heading1" }, new PageBreakBefore()),
-                new Run(new Text("第一章 工作概况"))), P("项目：{{r.ProjectName}}；工区：{{r.WorkareaName}}。"),
-            P("中央子午线：{{r.CentralMeridian}}；数据时间均为 UTC。"),
+                new Run(new Text("第一章 工作概况"))), P("项目：" + ReportFieldDictionary.Token("ProjectName") + "；工区：" + ReportFieldDictionary.Token("WorkareaName") + "。"),
+            P("中央子午线：" + ReportFieldDictionary.Token("CentralMeridian") + "；数据时间均为 UTC。"),
             P("任务目的", "Heading2"), Region("Objectives"),
             P("工作量与范围", "Heading2"),
-            new SdtBlock(new SdtProperties(new Tag { Val = "magops.spatial.Boundary" }), new SdtContentBlock(P("[设计边界待选择]"))),
+            new SdtBlock(new SdtProperties(new Tag { Val = ReportFieldDictionary.TagFor("Boundary") }), new SdtContentBlock(P("[设计边界待选择]"))),
             Table(["项目", "数值", "单位", "状态", "统计依据"],
                 ["{{#r.Facts}}{{.Id}}", "{{.Value}}", "{{.Unit}}", "{{.Status}}", "{{.Method}}{{/r.Facts}}"]),
             P("第二章 工作方法与质量评价", "Heading1"),
             P("技术依据与工作部署", "Heading2"),
-            P("待补充本项目适用规范、设计比例尺、测线间距、方向、设计飞高与实际部署；以已确认设计为准。"),
+            Region("Deployment"),
             P("人员设备与作业方法", "Heading2"), Region("Methods"),
             P("飞行质量及磁测质量指标", "Heading2"),
             P("设计偏航、离地高度、静态定位、动态与静态磁噪声、重复线总精度必须分别使用相应依据。海拔高程不能代替离地高度，实测拟合偏差不能代替设计偏航验收。"),
-            P("独立评估附件：{{r.AssessmentStatus}}。"),
+            P("独立评估附件：" + ReportFieldDictionary.Token("AssessmentStatus") + "。"),
             P("母测线工作量与质量统计", "Heading2"),
-            new SdtBlock(new SdtProperties(new Tag { Val = "magops.survey.Statistics" }), new SdtContentBlock(P("[母测线统计待计算]"))),
+            new SdtBlock(new SdtProperties(new Tag { Val = ReportFieldDictionary.TagFor("Statistics") }), new SdtContentBlock(P("[母测线统计待计算]"))),
             P("第三章 数据处理与图件", "Heading1"),
             P("已有处理记录", "Heading2"),
-            new SdtBlock(new SdtProperties(new Tag { Val = "magops.processing.Record" }), new SdtContentBlock(P("[处理记录待核对]"))),
+            new SdtBlock(new SdtProperties(new Tag { Val = ReportFieldDictionary.TagFor("Record") }), new SdtContentBlock(P("[处理记录待核对]"))),
             P("处理说明与外部成图步骤", "Heading2"), Region("ProcessingDescription"),
             P("保留作业轨迹", "Heading2"),
-            new SdtBlock(new SdtProperties(new Tag { Val = "magops.figure.TrackMap" }),
+            new SdtBlock(new SdtProperties(new Tag { Val = ReportFieldDictionary.TagFor("TrackMap") }),
                 new SdtContentBlock(P("[轨迹图待生成]"))),
             P("图件仅显示所选 CSV 的空间轨迹；为显示而抽稀，数据统计仍使用全部记录。不同 Pass 与时间断续处不连线。"),
             P("已有成果图件", "Heading2"),
-            new SdtBlock(new SdtProperties(new Tag { Val = "magops.figure.Results" }), new SdtContentBlock(P("[成果图待选择]"))),
+            new SdtBlock(new SdtProperties(new Tag { Val = ReportFieldDictionary.TagFor("Results") }), new SdtContentBlock(P("[成果图待选择]"))),
             P("第四章 成果解释", "Heading1"), Region("Interpretation"),
             P("第五章 结论与建议", "Heading1"), Region("Conclusions"),
             P("附录 保留航段统计", "Heading1"),
-            P("{{r.LineTableNote}}"),
+            P(ReportFieldDictionary.Token("LineTableNote")),
             Table(["测线", "Pass", "点数", "轨迹长度 km"],
                 ["{{#r.Lines}}{{.Name}}", "{{.Pass}}", "{{.Points}}", "{{.LengthKm}}{{/r.Lines}}"]),
             P("编制检查", "Heading1"), Region("Warnings"),
@@ -87,7 +87,7 @@ public static class ReportTemplate
         style is null ? new ParagraphProperties() : new ParagraphProperties(new ParagraphStyleId { Val = style }),
         new Run(new Text(text) { Space = SpaceProcessingModeValues.Preserve }));
 
-    private static SdtBlock Region(string name) => new(new SdtProperties(new Tag { Val = "magops.manual." + name }),
+    private static SdtBlock Region(string name) => new(new SdtProperties(new Tag { Val = ReportFieldDictionary.TagFor(name) }),
         new SdtContentBlock(P("[人工内容]")));
 
     internal static Table Table(string[] header, string[] row)

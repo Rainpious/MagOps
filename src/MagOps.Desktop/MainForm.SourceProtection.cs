@@ -18,6 +18,17 @@ public sealed partial class MainForm
     private bool ExportProtected(string path, string stage, IReadOnlyList<ArtifactDependency> dependencies,
         object options, Action<string> write, bool projectLevel = false)
     {
+        if (!IsPathInsideCurrentProject(path)) {
+            string folder = projectLevel ? _folderLayout.ResolveProjectFolder(Root, "project.delivery")
+                : _folderLayout.EnsureOperationDirectory(Root, "processing_analysis", CurrentWorkareaRelativePath);
+            Directory.CreateDirectory(folder);
+            string retained = GlobalWorkspaceService.UniqueFile(Path.Combine(folder, Path.GetFileName(path)));
+            if (!ExportProtected(retained, stage, dependencies, options, write, projectLevel)) return false;
+            ArtifactCopyService.Copy(retained, path);
+            RememberLatestGeneratedBusinessFile(path);
+            SetStatus("已另存成果及来源记录：" + path);
+            return true;
+        }
         if (File.Exists(path))
         {
             DialogResult choice = MessageBox.Show(this,
@@ -34,6 +45,7 @@ public sealed partial class MainForm
                 path = dialog.FileName;
             }
         }
+        if (!IsPathInsideCurrentProject(path)) return ExportProtected(path, stage, dependencies, options, write, projectLevel);
         var ws = _workspace.GetWorkspace(Root);
         string workareaId = projectLevel ? "" : _workspace.GetWorkareas(Root)
             .FirstOrDefault(x => x.Path.Equals(CurrentWorkareaRelativePath, StringComparison.OrdinalIgnoreCase))?.WorkareaId ?? "";

@@ -7,7 +7,8 @@ public static class ProjectPaths
     public const string ProjectFileName = "project.json";
     public const string LegacyProjectFileName = "workspace.json";
 
-    public static string Project(string root) => Json(root, ProjectFileName);
+    public static bool Compact(string root) => File.Exists(Path.Combine(root, ".magops", "folder-layout.json")) || File.Exists(Path.Combine(root, ProjectFileName));
+    public static string Project(string root) => Compact(root) ? Path.Combine(Path.GetFullPath(root), ProjectFileName) : Json(root, ProjectFileName);
 
     // Discovery and read-only integrations support legacy projects without writes.
     // If both names exist, project.json is the sole authority.
@@ -43,7 +44,7 @@ public static class ProjectPaths
     }
 
     public static string DataDirectory(string root) =>
-        Path.Combine(Path.GetFullPath(root), "00_项目管理", "magops");
+        Compact(root) ? Path.Combine(Path.GetFullPath(root), ".magops") : Path.Combine(Path.GetFullPath(root), "00_项目管理", "magops");
 
     public static string Json(string root, string fileName) =>
         Path.Combine(DataDirectory(root), fileName);

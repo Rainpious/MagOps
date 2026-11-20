@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using MagOps.Infrastructure.Storage;
 namespace MagOps.Infrastructure.Services;
 
@@ -75,10 +75,11 @@ public sealed class TerrainLibraryService
                 result.Add(existing);continue;
             }
             string name=Path.GetFileName(source);
-            string relative=Path.Combine("tiles",name);
+            bool alreadyManaged = sourceInfo is not null && Path.GetFullPath(source).StartsWith(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            string relative=alreadyManaged ? Path.GetRelativePath(root, source) : Path.Combine("其他地形",name);
             string target=SafePath(root,relative);
             if(File.Exists(target)&&GeneratedArtifactIdentity.Hash(target)!=hash) {
-                relative=Path.Combine("tiles",Path.GetFileNameWithoutExtension(name)+"_"+hash+Path.GetExtension(name));target=SafePath(root,relative);
+                target=GlobalWorkspaceService.UniqueFile(target);relative=Path.GetRelativePath(root,target);
             }
             if(!File.Exists(target))AtomicFileWriter.Write(target,stream=>{using var input=File.OpenRead(source);input.CopyTo(stream);});
             if(GeneratedArtifactIdentity.Hash(target)!=hash)throw new InvalidDataException("导入期间瓦片发生变化，未登记。");

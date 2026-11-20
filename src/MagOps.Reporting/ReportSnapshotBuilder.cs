@@ -22,13 +22,15 @@ public sealed class ReportSnapshotBuilder
         if (!File.Exists(inputs.ProductionCsv)) throw new FileNotFoundException("请选择已核验的处理用 CSV。", inputs.ProductionCsv);
         var sources = new List<ReportSource>();
         var facts = new List<ReportFact>();
-        var warnings = new List<string>();
+        var warnings = ReportSharedSources.Changes(root, workarea, workareaId, inputs.SharedItems, inputs.ReportDate)
+            .Select(label => "共用资料待确认：" + label).ToList();
         string hash = Hash(inputs.ProductionCsv);
         sources.Add(new("production-csv", Path.GetFullPath(inputs.ProductionCsv), hash));
         ReadProcessingReference(inputs.ProductionCsv, hash, sources, facts, warnings);
         if (!sources.Any(s => s.Role == "processing-manifest" && Path.GetFileName(s.Path) == "报告正式测线_manifest.json"))
             warnings.Add("当前采用已有CSV范围，可能已受日变有效性或其他生产筛选影响；完整正式测线原始磁评估请从“分线与处理→准备报告正式测线数据”生成来源。");
         var figurePaths = inputs.FigurePaths.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Concat(inputs.SharedItems.Where(i => i.Category == "成果图").Select(i => i.Value))
             .Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (figurePaths.Length > 20) throw new InvalidDataException("每份草稿最多附20张成果PNG图。");
         foreach (string figurePath in figurePaths)

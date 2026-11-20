@@ -20,7 +20,7 @@ public sealed partial class MainForm
         {
             using var save = new SaveFileDialog { Filter = "JSON|*.json", FileName = "外部成果声明.json", OverwritePrompt = true };
             var history = FileInteractions.For(this, "external-declaration", "output"); history.Prepare(save);
-            if (save.ShowDialog(this) != DialogResult.OK) return;
+            if (PrepareAutomaticSave(save, "processing_oasis") != DialogResult.OK) return;
             var declaration = new ExternalPackageDeclaration("workarea", CurrentWorkareaId, "", "processing", "", "", "", "未确认", "未确认", "", []);
             AtomicFileWriter.Write(save.FileName, s => JsonSerializer.Serialize(s, declaration, options)); history.OutputSucceeded(save.FileName);
         })));

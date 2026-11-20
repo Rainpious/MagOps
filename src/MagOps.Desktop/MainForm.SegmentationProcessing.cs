@@ -248,6 +248,7 @@ public sealed partial class MainForm
         foreach (Control empty in _processingReviewHost.Controls.Cast<Control>().ToArray()) empty.Dispose();
         _processingReviewHost.Controls.Clear();
         _processingReviewHost.Controls.Add(review);
+        review.SetAssessmentOutputDirectory(Path.Combine(_folderLayout.ResolveWorkareaFolder(Root, CurrentWorkareaRelativePath, "workarea.processing"), "质量"));
         _processingReview = review;
         _processingReviewContext = context;
         _processingCsvInput = csvInput;

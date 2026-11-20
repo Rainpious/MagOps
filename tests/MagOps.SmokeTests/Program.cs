@@ -3780,7 +3780,7 @@ internal static partial class Program
 
             File.WriteAllText(
                 Path.Combine(folder, "14.txt"),
-                "/Gem Systems GSM-19T 50610428 v7.0 13 III 2025 M t-e2@v7b\r\n" +
+                "/Gem Systems GSM-19T 00000001 v7.0 13 III 2025 M t-e2@v7b\r\n" +
                 "/ID 1 file 14 survey.b   09 IX 26\r\n" +
                 "/BL50 17 IV 2024\r\n" +
                 "/time nT sq\r\n" +
@@ -3798,7 +3798,7 @@ internal static partial class Program
 
             File.WriteAllText(
                 Path.Combine(folder, "16.txt"),
-                "/Gem Systems GSM-19T 50610428 v7.0 13 III 2025 M t-e2@v7b\r\n" +
+                "/Gem Systems GSM-19T 00000001 v7.0 13 III 2025 M t-e2@v7b\r\n" +
                 "/ID 1 file 16 survey.b   10 IX 26\r\n" +
                 "/time nT sq\r\n" +
                 "080400.0  59085.38 99\r\n" +
@@ -7395,8 +7395,11 @@ internal static partial class Program
             Equal(plan.Sorties.Count * 2, bundle.OutputPaths.Count);
 
             Equal("A01", plan.Sorties[0].Name);
-            string kml = Path.Combine(output, "01_KML", "A01.kml");
-            string csv = Path.Combine(output, "02_CSV", "A01.csv");
+            var settings = new GlobalWorkspaceService().Load();
+            bool flatOutput = settings.Root.Length > 0 && settings.AutomaticOutput;
+            string kmlDirectory = flatOutput ? output : Path.Combine(output, "01_KML");
+            string kml = Path.Combine(kmlDirectory, "A01.kml");
+            string csv = Path.Combine(flatOutput ? output : Path.Combine(output, "02_CSV"), "A01.csv");
             True(File.Exists(kml), "KML missing");
             True(File.Exists(csv), "CSV missing");
             True(
@@ -7553,7 +7556,7 @@ internal static partial class Program
                     StringComparison.OrdinalIgnoreCase),
                 "route KML must not declare XML namespaces");
 
-            string flatKml = Path.Combine(output, "01_KML", "架次01_无高程.kml");
+            string flatKml = Path.Combine(kmlDirectory, "架次01_无高程.kml");
             exporter.WriteSortieKmlWithoutElevation(
                 flatKml,
                 plan.Sorties[0],
@@ -7587,8 +7590,8 @@ internal static partial class Program
                     createCsv: false,
                     createKmz: false);
             True(Directory.Exists(selective.KmlDirectory), "selective KML directory missing");
-            True(!Directory.Exists(selective.CsvDirectory), "CSV directory must be lazy when not requested");
-            True(!Directory.Exists(selective.KmzDirectory), "KMZ directory must remain lazy while frozen");
+            True(!Directory.Exists(Path.Combine(selectiveRoot, "02_CSV")), "CSV directory must be lazy when not requested");
+            True(!Directory.Exists(Path.Combine(selectiveRoot, "03_KMZ_冻结")), "KMZ directory must remain lazy while frozen");
 
             // v25 CSV has no header and uses original point name, latitude, longitude.
             string firstCsvLine = File.ReadLines(csv).First().TrimStart('\uFEFF');

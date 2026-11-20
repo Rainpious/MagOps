@@ -81,6 +81,13 @@ public sealed class FolderLayoutService
         return document;
     }
 
+    private FolderLayoutDocument LoadForProject(string root)
+    {
+        string local = Path.Combine(Path.GetFullPath(root), ".magops", "folder-layout.json");
+        return _explicitConfigPath is null && File.Exists(local)
+            ? new FolderLayoutService(local).Load() : Load();
+    }
+
     public void EnsureEditableConfigurationFile()
     {
         string path = ConfigurationPath;
@@ -129,7 +136,7 @@ public sealed class FolderLayoutService
         DateTimeOffset? timestamp = null)
     {
         projectRoot = Path.GetFullPath(projectRoot);
-        FolderLayoutDocument document = Load();
+        FolderLayoutDocument document = LoadForProject(projectRoot);
         FolderOperationEntry operation = document.Operations.FirstOrDefault(x =>
                    x.Key.Equals(operationKey, StringComparison.OrdinalIgnoreCase))
                ?? throw new KeyNotFoundException($"目录配置中未定义操作：{operationKey}");
@@ -190,7 +197,7 @@ public sealed class FolderLayoutService
 
     public string ResolveProjectFolder(string projectRoot, string folderKey)
     {
-        FolderLayoutDocument document = Load();
+        FolderLayoutDocument document = LoadForProject(projectRoot);
         FolderLayoutEntry folder = document.ProjectFolders.FirstOrDefault(x =>
                    x.Key.Equals(folderKey, StringComparison.OrdinalIgnoreCase))
                ?? throw new KeyNotFoundException($"项目目录定义不存在：{folderKey}");
@@ -201,7 +208,9 @@ public sealed class FolderLayoutService
         string workareaRoot,
         string folderKey)
     {
-        FolderLayoutDocument doc = Load();
+        string? project = Path.GetFullPath(workareaRoot);
+        while (project is not null && !MagOps.Infrastructure.Storage.ProjectPaths.HasProject(project)) project = Path.GetDirectoryName(project);
+        FolderLayoutDocument doc = project is null ? Load() : LoadForProject(project);
         FolderLayoutEntry folder = doc.WorkareaFolders.FirstOrDefault(x =>
             x.Key.Equals(folderKey, StringComparison.OrdinalIgnoreCase))
             ?? throw new KeyNotFoundException($"未知工区目录键：{folderKey}");
@@ -215,7 +224,7 @@ public sealed class FolderLayoutService
         string workareaRelativePath,
         string folderKey)
     {
-        FolderLayoutDocument document = Load();
+        FolderLayoutDocument document = LoadForProject(projectRoot);
         FolderLayoutEntry folder = document.WorkareaFolders.FirstOrDefault(x =>
                    x.Key.Equals(folderKey, StringComparison.OrdinalIgnoreCase))
                ?? throw new KeyNotFoundException($"工区目录定义不存在：{folderKey}");

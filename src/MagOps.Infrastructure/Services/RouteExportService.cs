@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
@@ -401,6 +401,10 @@ public sealed class RouteExportService
 
         string fullBase = Path.GetFullPath(baseDirectory);
         string prefix = SafeFolderStem(workareaName);
+
+        var preferences = new GlobalWorkspaceService().Load();
+        if (preferences.Root.Length > 0 && preferences.AutomaticOutput)
+            return new RouteExportDirectoryLayout(fullBase, prefix, fullBase, fullBase, fullBase);
 
         return new RouteExportDirectoryLayout(
             fullBase,

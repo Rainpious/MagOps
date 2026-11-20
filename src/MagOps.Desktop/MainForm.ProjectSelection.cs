@@ -316,8 +316,10 @@ public sealed partial class MainForm
             ShowNewFolderButton = true
         };
         fileHistory.Prepare(parentDialog);
-        if (parentDialog.ShowDialog(this) != DialogResult.OK)
-            return;
+        var global = new GlobalWorkspaceService(); var preferences = global.Load();
+        bool automatic = preferences.Root.Length > 0 && preferences.AutomaticOutput && !_saveElsewhere;
+        if (automatic) parentDialog.SelectedPath = global.ProjectParent();
+        else if (parentDialog.ShowDialog(this) != DialogResult.OK) return;
 
         var values = PromptDialog.Show(
             this,
@@ -347,7 +349,8 @@ public sealed partial class MainForm
             return;
         }
 
-        Directory.CreateDirectory(root);
+        if (automatic) GlobalWorkspaceService.PrepareNewProject(root);
+        else Directory.CreateDirectory(root);
         _rootBox.Text = Path.GetFullPath(root);
         SetProjectContext(Root);
         ResetWorkareaContext();

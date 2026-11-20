@@ -186,7 +186,8 @@ public sealed class RoutePlanningWorkflow
                 {
                     string parent = Path.GetDirectoryName(full)
                         ?? throw new InvalidDataException("航线 staging 成果缺少父目录。");
-                    string stageRoot = Path.GetDirectoryName(parent)
+                    string stageRoot = finalLayout.KmlDirectory == finalLayout.BaseDirectory
+                        ? parent : Path.GetDirectoryName(parent)
                         ?? throw new InvalidDataException("航线 staging 目录结构无效。");
                     string relative = Path.GetRelativePath(stageRoot, full);
                     string finalPath = Path.GetFullPath(

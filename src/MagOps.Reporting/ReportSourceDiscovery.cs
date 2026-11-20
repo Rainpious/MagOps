@@ -104,6 +104,8 @@ public static class ReportSourceDiscovery
                 "自动选择当前工区最新完整评估（独立参考，不能证明与最终CSV选择范围相同）：" + selected);
         }
         else notes.Add("保留手动指定的飞行评估目录。");
+        inputs = ReportSharedSources.Prefill(root, area, areaId, inputs);
+        if (inputs.SharedItems.Length > 0) notes.Add($"已引用 {inputs.SharedItems.Length} 条共用资料，可在“引用共用资料”中核对。");
         return new(inputs, string.Join(Environment.NewLine, notes));
     }
 

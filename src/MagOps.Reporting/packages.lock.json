@@ -21,12 +21,6 @@
           "DynamicExpresso.Core": "[2.19.3, 3.0.0)"
         }
       },
-      "Microsoft.NET.ILLink.Tasks": {
-        "type": "Direct",
-        "requested": "[10.0.12, )",
-        "resolved": "10.0.12",
-        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
-      },
       "DocumentFormat.OpenXml.Framework": {
         "type": "Transitive",
         "resolved": "3.5.1",
@@ -54,7 +48,6 @@
           "MagOps.Core": "[1.0.0, )"
         }
       }
-    },
-    "net10.0/win-x64": {}
+    }
   }
 }

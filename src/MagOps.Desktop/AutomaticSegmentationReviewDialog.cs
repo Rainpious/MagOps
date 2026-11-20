@@ -1,4 +1,4 @@
-﻿using System.Drawing.Drawing2D;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Text.Json;
 using MagOps.Core.Domain;
@@ -105,6 +105,8 @@ internal sealed partial class AutomaticSegmentationReviewDialog : Form
         string routeFingerprint, TimeZoneInfo? timeZone, double? referenceCentralMeridian,
         bool deferInitialAnalysis, bool spatialOnly)
     {
+        var preferences = new GlobalWorkspaceService().Load();
+        if (preferences.Root.Length > 0) _flightQualityOutputRoot = new GlobalWorkspaceService().Standalone("quality-output");
         _spatialOnly = spatialOnly;
         if (spatialOnly) _automaticAssessment.Checked = false;
         _reviewAnalysisSession = new(_reviewDecisions, _auditService);
@@ -1377,6 +1379,8 @@ internal sealed partial class AutomaticSegmentationReviewDialog : Form
         _lastAssessmentSaveKey = saveKey; _lastAssessmentSave = save;
         return save;
     }
+
+    internal void SetAssessmentOutputDirectory(string path) => _flightQualityOutputRoot = Path.GetFullPath(path);
 
     private async void SaveFlightQualityAssessment(bool chooseDirectory)
     {

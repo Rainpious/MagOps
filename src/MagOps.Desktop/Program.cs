@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Threading;
 
 namespace MagOps.Desktop;
@@ -38,6 +38,11 @@ internal static class Program
 
             using var appearance = UiTheme.TrackApplication();
             using var parameterWheel = new ParameterWheelFilter();
+            if (new MagOps.Infrastructure.Services.GlobalWorkspaceService().Load().Root.Length == 0)
+            {
+                using var setup = new WorkspaceSettingsDialog();
+                if (setup.ShowDialog() != DialogResult.OK) return;
+            }
             System.Windows.Forms.Application.Run(new MainForm());
         }
         catch (Exception ex)

@@ -2005,31 +2005,14 @@ public sealed partial class MainForm
 
     private void ChooseRouteOutput()
     {
-        if (TryGetManagedOutputContext(
-                out _,
-                out _,
-                out _))
-        {
-            string managed = ResolveToolOutputDirectory(
-                "route_export",
-                "航线 KML/CSV 输出");
-            _routeWorkspace.SetOutputPath(managed);
-            TransientNotice.Show(
-                this,
-                "当前已选择项目和工区，航线导出固定归档到项目文件树。",
-                "使用项目归档目录");
-            return;
-        }
-
-        using var dialog = new FolderBrowserDialog
-        {
-            Description = "当前未选择完整项目/工区上下文；请选择临时统一输出根目录（KML/CSV 将分别进入 01_KML/02_CSV）",
-            ShowNewFolderButton = true
-        };
+        using var dialog = new FolderBrowserDialog { Description = "选择自定义航线输出目录", ShowNewFolderButton = true };
         FileInteractions.For(this, "route_export", "output").Prepare(dialog, current: _routeWorkspace.GetOutputPath());
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+        if (dialog.ShowDialog(this) == DialogResult.OK) {
             _routeWorkspace.SetOutputPath(dialog.SelectedPath);
+            _customRouteOutputs[FileInteractionContext(false).Scope.Key] = dialog.SelectedPath;
+        }
     }
+    private readonly Dictionary<string, string> _customRouteOutputs = new();
 
     private void ChooseRouteTerrainDem(string? selectedPath = null)
     {
@@ -3585,6 +3568,20 @@ public sealed partial class MainForm
         target.TaskReferences = snapshot.TaskReferences.ToList();
     }
 
+    private RouteWorkflowExportResult ExportRouteWithCustomDestination(RoutePlanResult plan, RouteExportRequest request)
+    {
+        if (IsPathInsideCurrentProject(request.OutputDirectory)) return _routePlanningWorkflow.Export(plan, request);
+        string retained = Path.Combine(_folderLayout.EnsureOperationDirectory(Root, "route_export", CurrentWorkareaRelativePath),
+            "另存_" + DateTime.Now.ToString("yyyyMMdd-HHmmssfff"));
+        var result = _routePlanningWorkflow.Export(plan, request with { OutputDirectory = retained });
+        var copied = new List<string>();
+        foreach (string source in result.Bundle.OutputPaths) {
+            string destination = Path.Combine(request.OutputDirectory, Path.GetRelativePath(retained, source));
+            ArtifactCopyService.Copy(source, destination); copied.Add(destination);
+        }
+        return result with { Bundle = new RouteExportBundle(request.OutputDirectory, copied) };
+    }
+
     private void ExportRouteSubset(bool kml, bool csv, bool kmz)
     {
         if (kmz)
@@ -3621,7 +3618,7 @@ public sealed partial class MainForm
             "航线导出");
 
         RouteWorkflowExportResult routeExport =
-            _routePlanningWorkflow.Export(
+            ExportRouteWithCustomDestination(
                 _routePlan!,
                 new RouteExportRequest(
                     Root,
@@ -3649,7 +3646,7 @@ public sealed partial class MainForm
             : "";
         SetStatus(
             $"航线导出完成：{bundle.OutputPaths.Count} 个文件 → " +
-            $"{bundle.OutputDirectory}（KML/CSV 分别归档到 01_KML/02_CSV）" +
+            $"{bundle.OutputDirectory}" +
             (kmlMode.Length > 0 ? $"；{kmlMode}" : ""));
         TransientNotice.Show(this, $"航线文件已生成：{bundle.OutputPaths.Count} 个文件", "文件写入成功");
     }
@@ -3825,10 +3822,10 @@ public sealed partial class MainForm
 
         RouteExportBundle bundle;
         RouteWorkflowExportResult? routeExport = null;
-        if (managed && IsProjectInitialized())
+        if (IsProjectInitialized() && !string.IsNullOrWhiteSpace(CurrentWorkareaId))
         {
             routeExport =
-                _routePlanningWorkflow.Export(
+                ExportRouteWithCustomDestination(
                     _routePlan!,
                     new RouteExportRequest(
                         Root,
@@ -3856,6 +3853,7 @@ public sealed partial class MainForm
                 kmlTerrain, kmlAglM, kmlIncludeElevation);
         }
 
+        managed = managed && IsPathInsideCurrentProject(output);
         string taskBaselinePath = "";
         if (managed && IsProjectInitialized())
         {
@@ -3869,7 +3867,7 @@ public sealed partial class MainForm
             SetStatus(
                 $"KML/CSV 已临时导出：{bundle.OutputPaths.Count} 个文件；" +
                 $"KML={(kmlIncludeElevation ? "DEM+AGL 高程" : "无高程")}；" +
-                "未写入项目结果登记。");
+                "未生成正式结果清单；项目内受管副本按实际导出情况保留。");
 
             TransientNotice.Show(
                 this,
@@ -3959,7 +3957,7 @@ public sealed partial class MainForm
         {
             EnsureCurrentRoutePlanBoundarySafe(plan);
             RouteWorkflowExportResult routeExport =
-                _routePlanningWorkflow.Export(
+                ExportRouteWithCustomDestination(
                     plan,
                     new RouteExportRequest(
                         Root,
@@ -3999,6 +3997,10 @@ public sealed partial class MainForm
             Root,
             "route_project",
             relativeWorkarea);
+        if (ProjectPaths.Compact(Root)) {
+            directory = Path.Combine(Root, relativeWorkarea, ".magops", "autosave");
+            Directory.CreateDirectory(directory);
+        }
         string suffix = string.IsNullOrWhiteSpace(plan.PartitionCode)
             ? "自动恢复"
             : $"{plan.PartitionCode}_自动恢复";
@@ -4327,7 +4329,8 @@ public sealed partial class MainForm
     private string RequireRouteOutput()
     {
         string output;
-        if (TryGetManagedOutputContext(
+        if (!_saveElsewhere && _customRouteOutputs.TryGetValue(FileInteractionContext(false).Scope.Key, out string? custom)) output = custom;
+        else if (TryGetManagedOutputContext(
                 out _,
                 out _,
                 out _))

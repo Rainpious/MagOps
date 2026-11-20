@@ -20,7 +20,7 @@ internal sealed class ReportWorkspaceControl : UserControl
     public bool HasChanges { get; private set; }
     public event EventHandler? Changed;
 
-    public ReportWorkspaceControl(Action save, Action check, Action generate, Action exportTemplate, Action openOutput, Action rediscover, Action importDesign, Action? qualityCheck = null)
+    public ReportWorkspaceControl(Action save, Action check, Action generate, Action exportTemplate, Action openOutput, Action rediscover, Action importDesign, Action? qualityCheck = null, Action? shared = null, Action? delivery = null, Action<string>? workingReport = null)
     {
         Dock = DockStyle.Fill;
         _checks.AccessibleName = "报告检查结果与统计";
@@ -32,14 +32,40 @@ internal sealed class ReportWorkspaceControl : UserControl
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.Controls.Add(UiComponents.PageHeader("报告编写", "从分线核验后的正式测线原始磁数据生成小结草稿；母线方向统一，缺项保留提示。输出 Word 中的修改不会自动合并回下一次生成。"), 0, 0);
+        root.Controls.Add(UiComponents.PageHeader("报告编写", "选择工作稿模板后，可在 Word 中续写。更新或导出前，请保存并关闭工作稿。"), 0, 0);
         root.Controls.Add(_context, 0, 1);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         void ActionButton(string title, Action action)
         { var button = new Button { Text = title, AutoSize = true }; button.Click += (_, _) => action(); actions.Controls.Add(button); }
         ActionButton("保存资料", save); ActionButton("检查与统计", check); ActionButton("生成 Word 草稿", generate);
-        ActionButton("另存内置模板", exportTemplate); ActionButton("打开报告目录", openOutput);
+        if (delivery != null) ActionButton("生成小结审阅与交付文件", delivery);
+        if (workingReport != null)
+        {
+            var format = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 115, AccessibleName = "工作稿模板" };
+            format.Items.AddRange(["平泉", "塔尔曼"]);
+            format.SelectedIndex = 0;
+            actions.Controls.Add(format);
+            foreach (var verb in new[] { "新建", "打开", "更新", "导出" })
+            {
+                var button = new Button { AutoSize = true };
+                void SetLabel() => button.Text = verb + format.SelectedItem + (verb == "导出" ? "交付稿" : "工作稿");
+                SetLabel();
+                format.SelectedIndexChanged += (_, _) => SetLabel();
+                button.Click += (_, _) => workingReport(button.Text);
+                actions.Controls.Add(button);
+            }
+            foreach (var label in new[] { "更新塔尔曼表 4-3 探头参数", "更新塔尔曼日变基站", "更新塔尔曼日变站选址及基值" })
+            {
+                var button = new Button { Text = label, AutoSize = true, Visible = false };
+                format.SelectedIndexChanged += (_, _) => button.Visible = Equals(format.SelectedItem, "塔尔曼");
+                button.Click += (_, _) => workingReport(label);
+                actions.Controls.Add(button);
+            }
+        }
+        ActionButton("另存内置模板", exportTemplate);
+        ActionButton("字段字典", () => { using var dialog = new ReportFieldDictionaryDialog(); dialog.ShowDialog(this); }); ActionButton("打开报告目录", openOutput);
         ActionButton("重新识别已有成果", rediscover);
+        if (shared is not null) ActionButton("引用共用资料", shared);
         ActionButton("引用当前设计身份", importDesign);
         if (qualityCheck is not null) ActionButton("独立质量验算", qualityCheck);
         root.Controls.Add(actions, 0, 2);

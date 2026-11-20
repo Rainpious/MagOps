@@ -6,7 +6,11 @@ MagOps is a Windows desktop workspace for magnetic-survey project organization, 
 
 ## 下载与运行
 
-从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.55，仍在持续开发和实机验收。
+从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.58，仍在持续开发和实机验收。
+
+## 报告编写
+
+打开项目和工区后，从「报告编写」维护项目单位、人员、平台和磁探头型号资料，生成 Word 草稿并查看输入来源。平泉式工作稿使用随程序内置的空白模板。塔尔曼式工作稿需选择具备对应内容控件和题注的兼容 .dotx，可按设备台账更新平台、探头、日变基站及站点字段。更新前可核对差异，手工解释与备注随工作稿保存。
 
 ## 解决哪些问题
 

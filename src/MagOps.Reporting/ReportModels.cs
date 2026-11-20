@@ -22,6 +22,8 @@ public sealed record ReportInputs
     public string Conclusions { get; init; } = "";
     public ReportSurveyTask[] SurveyTasks { get; init; } = [];
     public ReportRepeatPair[] RepeatPairs { get; init; } = [];
+    public bool SharedSelectionReviewed { get; init; }
+    public ReportSharedItem[] SharedItems { get; init; } = [];
     public ReportSupplement[] Supplements { get; init; } = [];
     public ReportStaticTrial[] StaticTrials { get; init; } = [];
     public string DesignBoundaryKml { get; init; } = "";

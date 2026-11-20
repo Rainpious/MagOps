@@ -79,6 +79,17 @@ public sealed class Aw3d30DownloadService
         {
             token.ThrowIfCancellationRequested();
             string archiveHash = GeneratedArtifactIdentity.Hash(archive);
+            var previous = library.Open(root).Assets.FirstOrDefault(a => a.Source?.ArchiveSha256 == archiveHash && a.Source?.Url == tile.DownloadUri.AbsoluteUri);
+            if (previous?.Source is { } oldSource) {
+                string receiptPath = TerrainLibraryService.SafePath(root, oldSource.EvidenceRelativePath);
+                var receipt = System.Text.Json.JsonSerializer.Deserialize<Aw3d30Receipt>(File.ReadAllText(receiptPath)) ?? throw new InvalidDataException("来源清单无效。");
+                if (receipt.Files.Count == 0) throw new InvalidDataException("已有来源清单缺失。");
+                foreach (var item in receipt.Files) {
+                    string file = TerrainLibraryService.SafePath(Path.GetDirectoryName(receiptPath)!, item.Key);
+                    if (!File.Exists(file) || GeneratedArtifactIdentity.Hash(file) != item.Value) throw new InvalidDataException("已有来源文件变化，未覆盖。");
+                }
+                return library.Import([TerrainLibraryService.SafePath(root, previous.RelativePath)], token, oldSource).Single();
+            }
             using (var zip = ZipFile.OpenRead(archive))
             {
                 if (zip.Entries.Count > 64 || zip.Entries.Sum(e => e.Length) > 512L * 1024 * 1024) throw new InvalidDataException("AW3D30 压缩包超出瓦片大小限制。");
@@ -90,8 +101,8 @@ public sealed class Aw3d30DownloadService
                     if (!name.StartsWith(tile.Id + "/", StringComparison.Ordinal) || name.Contains(':') || name.Split('/').Any(p => p is "." or "..") || !names.Add(name))
                         throw new InvalidDataException("AW3D30 包含异常或重复的文件路径。");
                     if (((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000) throw new InvalidDataException("AW3D30 包不允许符号链接。");
-                    string target = TerrainLibraryService.SafePath(stage, name);
-                    if (name.EndsWith('/')) { if (name != tile.Id + "/") throw new InvalidDataException("瓦片包目录结构异常。"); Directory.CreateDirectory(target); continue; }
+                    if (name.EndsWith('/')) { if (name != tile.Id + "/") throw new InvalidDataException("瓦片包目录结构异常。"); continue; }
+                    string target = TerrainLibraryService.SafePath(stage, Path.GetFileName(name));
                     if (!new[] { "_DSM.tif", "_MSK.tif", "_STK.tif", "_HDR.txt", "_QAI.txt", "_LST.txt" }.Any(s => name == tile.Id + "/ALPSMLC30_" + tile.Id + s))
                         throw new InvalidDataException("AW3D30 包含未识别的文件；请核实官方格式是否发生变化。");
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -101,7 +112,7 @@ public sealed class Aw3d30DownloadService
                     if (total != entry.Length) throw new InvalidDataException("压缩包不完整。");
                 }
             }
-            string stem = Path.Combine(stage, tile.Id, "ALPSMLC30_" + tile.Id);
+            string stem = Path.Combine(stage, "ALPSMLC30_" + tile.Id);
             foreach (string suffix in new[] { "_DSM.tif", "_MSK.tif", "_STK.tif", "_HDR.txt", "_QAI.txt", "_LST.txt" })
                 if (!File.Exists(stem + suffix)) throw new InvalidDataException("AW3D30 文件族不完整：" + suffix);
             if (!File.ReadAllText(stem + "_HDR.txt").Contains("EGM96", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("瓦片头文件未声明 EGM96，不能套用默认高程基准。");
@@ -116,20 +127,36 @@ public sealed class Aw3d30DownloadService
                 "Terms: https://earth.jaxa.jp/en/data/policy/\n" +
                 "Credit JAXA and applicable supplementary data providers when publishing or distributing derivatives. Commercial use requires advance notification to JAXA under the current terms.\n" +
                 "Supplementary source information is retained in the original MSK/HDR/QAI/LST files.\n");
-            string relative = Path.Combine("sources", "AW3D30", tile.Id, archiveHash);
-            var source = new TerrainSource("JAXA AW3D30", "release_v2404", "DSM", "EGM96", tile.DownloadUri.AbsoluteUri, archiveHash, Path.Combine(relative, "source.json"), DateTimeOffset.UtcNow);
-            var hashes = Directory.EnumerateFiles(stage, "*", SearchOption.AllDirectories).ToDictionary(p => Path.GetRelativePath(stage, p), GeneratedArtifactIdentity.Hash);
-            TerrainLibraryService.Write(Path.Combine(stage, "source.json"), new Aw3d30Receipt("magops-aw3d30-source-1", tile.Id, source, hashes));
-            string committed = TerrainLibraryService.SafePath(root, relative);
+            string relative = Path.Combine("AW3D30", tile.Id);
+            TerrainSource source;
+            string committed;
             using (WorkspaceFileLock.AcquireDirectory(root))
             {
+                int version = 1;
+                Aw3d30Receipt? recovered = null;
+                while (Directory.Exists(TerrainLibraryService.SafePath(root, relative)) || File.Exists(TerrainLibraryService.SafePath(root, relative))) {
+                    string candidate = TerrainLibraryService.SafePath(root, Path.Combine(relative, "source.json"));
+                    if (File.Exists(candidate)) {
+                        var receipt = System.Text.Json.JsonSerializer.Deserialize<Aw3d30Receipt>(File.ReadAllText(candidate));
+                        if (receipt?.Source.ArchiveSha256 == archiveHash) {
+                            foreach (var item in receipt.Files) {
+                                string file = TerrainLibraryService.SafePath(Path.GetDirectoryName(candidate)!, item.Key);
+                                if (!File.Exists(file) || GeneratedArtifactIdentity.Hash(file) != item.Value) throw new InvalidDataException("已有来源文件变化，未覆盖。");
+                            }
+                            recovered = receipt; break;
+                        }
+                    }
+                    relative = Path.Combine("AW3D30", tile.Id + "_v" + (++version));
+                }
+                source = recovered?.Source ?? new TerrainSource("JAXA AW3D30", "release_v2404", "DSM", "EGM96", tile.DownloadUri.AbsoluteUri, archiveHash, Path.Combine(relative, "source.json"), DateTimeOffset.UtcNow);
+                var hashes = Directory.EnumerateFiles(stage, "*", SearchOption.AllDirectories).ToDictionary(p => Path.GetRelativePath(stage, p), GeneratedArtifactIdentity.Hash);
+                TerrainLibraryService.Write(Path.Combine(stage, "source.json"), new Aw3d30Receipt("magops-aw3d30-source-1", tile.Id, source, hashes));
+                committed = TerrainLibraryService.SafePath(root, relative);
                 token.ThrowIfCancellationRequested();
-                if (!Directory.Exists(committed)) { Directory.CreateDirectory(Path.GetDirectoryName(committed)!); Directory.Move(stage, committed); }
-                else foreach (var file in hashes)
-                    if (!File.Exists(TerrainLibraryService.SafePath(committed, file.Key)) || GeneratedArtifactIdentity.Hash(TerrainLibraryService.SafePath(committed, file.Key)) != file.Value)
-                        throw new InvalidDataException("已保存的 AW3D30 文件族缺失或变化；未覆盖。");
+                Directory.CreateDirectory(Path.GetDirectoryName(committed)!);
+                if (recovered is null) Directory.Move(stage, committed);
             }
-            return library.Import([Path.Combine(committed, tile.Id, "ALPSMLC30_" + tile.Id + "_DSM.tif")], token, source).Single();
+            return library.Import([Path.Combine(committed, "ALPSMLC30_" + tile.Id + "_DSM.tif")], token, source).Single();
         }
         finally { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
     }

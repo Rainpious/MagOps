@@ -1,4 +1,4 @@
-﻿using MagOps.Application;
+using MagOps.Application;
 using System.ComponentModel;
 using MagOps.Core.Coordinates;
 using MagOps.Core.Domain;
@@ -748,6 +748,13 @@ public sealed partial class MainForm : Form
         UiComponents.SetButtonRole(newProject, UiButtonRole.Primary);
         newProject.Margin = new Padding(0, 2, 12, 2);
         projectBar.Controls.Add(newProject);
+        projectBar.Controls.Add(Button("工作目录…", (_, _) => RunUi("工作目录设置", () => {
+            using var dialog = new WorkspaceSettingsDialog(); dialog.ShowDialog(this);
+        })));
+        var saveElsewhere = new CheckBox { Text = "另存到…", AutoSize = true, Margin = new Padding(3, 8, 8, 3) };
+        saveElsewhere.CheckedChanged += (_, _) => _saveElsewhere = saveElsewhere.Checked;
+        _toolTip.SetToolTip(saveElsewhere, "勾选后导出时选择自定义位置；取消恢复自动归档。草稿仍保存在所属工程。");
+        projectBar.Controls.Add(saveElsewhere);
 
         projectBar.Controls.Add(new Label
         {

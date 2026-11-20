@@ -16,8 +16,13 @@ namespace MagOps.Reporting;
 public sealed class ReportCompiler
 {
     public ReportBuildResult Build(string root, string workarea, ReportSnapshot snapshot, byte[] trackPng,
-        IReadOnlyDictionary<string, byte[]>? qualityFigures = null)
+        IReadOnlyDictionary<string, byte[]>? qualityFigures = null, bool delivery = false)
     {
+        void CheckSharedSources()
+        {
+            var changed = ReportSharedSources.Changes(root, workarea, snapshot.WorkareaId, snapshot.Inputs.SharedItems, snapshot.Inputs.ReportDate);
+            if (changed.Count > 0) throw new InvalidOperationException("共用资料有变化，请在“引用共用资料”确认：" + string.Join("、", changed));
+        }
         string reportRoot = ReportInputStore.DirectoryFor(root, workarea);
         Directory.CreateDirectory(reportRoot);
         string id = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N")[..8];
@@ -30,27 +35,32 @@ public sealed class ReportCompiler
             foreach (var source in snapshot.Sources)
                 if (!File.Exists(source.Path) || !ReportSnapshotBuilder.Hash(source.Path).Equals(source.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new IOException("报告来源已变化，请重新检查：" + source.Role);
+            CheckSharedSources();
             string template = Path.Combine(staging, "template.docx");
             if (string.IsNullOrWhiteSpace(snapshot.Inputs.TemplatePath)) ReportTemplate.Create(template);
             else File.Copy(snapshot.Inputs.TemplatePath, template, false);
             string templateHash = ReportSnapshotBuilder.Hash(template);
-            ValidateContract(template);
+            ReportFieldDictionary.Validate(template);
             string document = Path.Combine(staging, "航磁工作小结_草稿.docx");
-            using (var processor = DocxTemplate.Open(template))
+            void Bind(string templatePath, string target, bool external)
             {
-                processor.BindModel("r", new
+            using (var processor = DocxTemplate.Open(templatePath))
+            {
+                processor.BindModel(ReportFieldDictionary.ModelRoot, new
                 {
                     snapshot.Inputs.ProjectName, snapshot.Inputs.WorkareaName, snapshot.Inputs.Organization,
                     snapshot.Inputs.Author, snapshot.Inputs.ReportDate,
                     CentralMeridian = snapshot.CentralMeridian?.ToString("0.######", CultureInfo.InvariantCulture) ?? "待确认",
                     AssessmentStatus = snapshot.Sources.Any(x => x.Role == "assessment-manifest") ? "已校验内部完整性，尚未建立与生产选择范围的一致性" : "未选择",
-                    Facts = snapshot.Facts.Where(f => !f.Id.StartsWith("人工补录 ", StringComparison.Ordinal) && (f.Id != "processing_record" || !string.IsNullOrWhiteSpace(snapshot.Inputs.TemplatePath))).Select(f => new { Id = FactName(f.Id), f.Value, f.Unit, Status = Status(f.Status),
+                    Facts = snapshot.Facts.Where(f => (!external || ReportDelivery.Include(f)) && !f.Id.StartsWith("人工补录 ", StringComparison.Ordinal) && (f.Id != "processing_record" || !string.IsNullOrWhiteSpace(snapshot.Inputs.TemplatePath))).Select(f => new { Id = ReportFieldDictionary.DisplayName(f.Id), f.Value, f.Unit, Status = Status(f.Status),
                         Method = f.Status == "UNAVAILABLE" ? "需补充相应独立依据" : f.Method }).ToArray(),
                     LineTableNote = $"共{snapshot.Lines.Count}组任务/Pass，下表列示前20组；完整记录见同目录保留航段统计.csv。长度含重复飞行，不代表独立工作量。",
                     Lines = snapshot.Lines.Take(20).Select(l => new { l.Name, l.Pass, l.Points, LengthKm = l.LengthKm.ToString("0.000", CultureInfo.InvariantCulture) }).ToArray()
                 });
-                processor.Save(document);
+                processor.Save(target);
             }
+            }
+            Bind(template,document,false);
             string figure = Path.Combine(staging, "保留作业轨迹.png"); File.WriteAllBytes(figure, trackPng);
             foreach (var source in snapshot.Sources.Where(s => s.Role == "processing-manifest"))
             {
@@ -97,6 +107,26 @@ public sealed class ReportCompiler
                 snapshot.Warnings, MissingFacts = snapshot.Facts.Where(f => f.Status == "UNAVAILABLE").ToArray(),
                 ManualEditing = "人工章节以report-inputs.json为源；直接编辑输出Word后须作为独立终稿保存，后续生成不会自动合并。"
             }, ReportInputStore.Json));
+            if (delivery)
+            {
+                ReportDelivery.WriteChecklist(staging,snapshot);
+                string folder = Path.Combine(staging,"交付");
+                Directory.CreateDirectory(folder);
+                string copy = Path.Combine(staging,"delivery-template.docx");
+                File.Copy(template,copy);
+                ReportDelivery.PrepareTemplate(copy,snapshot);
+                string final = Path.Combine(folder,"航磁工作小结.docx");
+                Bind(copy,final,true);
+                FillManualAndFigure(final,snapshot,trackPng,qualityFigures,true);
+                ReportDelivery.ValidateWord(final);
+                File.Delete(copy);
+                var attachments = new List<string>{"保留航段统计.csv"};
+                if (snapshot.BoundaryVertices.Count>0) attachments.Add("设计边界拐点.csv");
+                if (snapshot.Survey?.Mothers.Count>0) attachments.AddRange(["正式母测线报告统计.csv","重复线报告统计.csv","重复线报告汇总.csv"]);
+                if (snapshot.StaticTrials.Count>0) attachments.AddRange(["静态磁噪声报告统计.csv","静态定位报告统计.csv"]);
+                if (snapshot.QualityReference?.Result.DynamicLines.Length>0) attachments.Add("动态噪声逐线统计.csv");
+                foreach (var name in attachments) File.Copy(Path.Combine(staging,name),Path.Combine(folder,name));
+            }
             string fingerprint = snapshot.Sources.Single(s => s.Role == "production-csv").Sha256;
             var identityContext = new GeneratedArtifactContext(snapshot.ProjectId, snapshot.WorkareaId);
             var lineage = new GeneratedArtifactLineage([], [], snapshot.Lines.Select(l => l.TaskId).Distinct().ToArray(), [], []);
@@ -105,11 +135,13 @@ public sealed class ReportCompiler
                     snapshot.Sources.Select(s => s.Path).ToArray(), qualityStatus: "REVIEW_REQUIRED", context: identityContext, lineage: lineage);
             File.WriteAllText(Path.Combine(staging, "manifest.json"), JsonSerializer.Serialize(new
             {
-                SchemaVersion = "magops-report-bundle-1", Complete = true, Draft = true,
+                SchemaVersion = "magops-report-bundle-1", Complete = true, Draft = true, HasDeliveryCandidate = delivery,
+                FieldDictionaryVersion = ReportFieldDictionary.Version,
                 TemplateVersion = string.IsNullOrWhiteSpace(snapshot.Inputs.TemplatePath) ? ReportTemplate.Version : "USER_TEMPLATE",
                 TemplateSha256 = templateHash, TemplateEngine = "DocxTemplater 2.9.7", OpenXml = "3.5.1",
                 Files = Directory.GetFiles(staging, "*", SearchOption.AllDirectories).Order().Select(p => new { File = Path.GetRelativePath(staging, p), Sha256 = ReportSnapshotBuilder.Hash(p) }).ToArray()
             }, ReportInputStore.Json));
+            CheckSharedSources();
             Directory.Move(staging, output);
             return new(output, Path.Combine(output, Path.GetFileName(document)), Path.Combine(output, "snapshot.json"), Path.Combine(output, "manifest.json"));
         }
@@ -121,14 +153,8 @@ public sealed class ReportCompiler
     }
 
     private static string Status(string status) => status switch { "AVAILABLE" => "已统计", "REFERENCE_ONLY" => "独立参考", _ => "待补充" };
-    private static string FactName(string id) => id switch
-    {
-        "retained_points" => "所选CSV样点", "retained_lines" => "追溯任务数（非母线条数）", "retained_passes" => "任务与Pass分组",
-        "retained_length" => "累计保留轨迹长度", "utc_range" => "数据时间范围", "elevation_range" => "海拔高程范围",
-        "assessment_source" => "独立评估批次指纹", "assessment_task_scope" => "评估任务覆盖范围", "processing_record" => "已有处理记录", _ => id
-    };
 
-    private static IEnumerable<string> TextParts(WordprocessingDocument doc)
+    internal static IEnumerable<string> TextParts(WordprocessingDocument doc)
     {
         var main = doc.MainDocumentPart!;
         yield return main.Document?.InnerText ?? "";
@@ -138,24 +164,11 @@ public sealed class ReportCompiler
         if (main.EndnotesPart is { } end) yield return end.Endnotes?.InnerText ?? "";
     }
 
-    private static void ValidateContract(string path)
-    {
-        using var doc = WordprocessingDocument.Open(path, false);
-        if (doc.MainDocumentPart?.Document?.Body is not { } body) throw new InvalidDataException("模板缺少正文。");
-        foreach (string name in new[] { "Objectives", "Methods", "ProcessingDescription", "Interpretation", "Conclusions", "Warnings" })
-            if (body.Descendants<SdtBlock>().Count(x => x.SdtProperties?.GetFirstChild<Tag>()?.Val?.Value == "magops.manual." + name) != 1)
-                throw new InvalidDataException("模板必须包含一个人工内容控件：magops.manual." + name + "。请从内置模板另存后修改排版。");
-        if (body.Descendants<SdtBlock>().Count(x => x.SdtProperties?.GetFirstChild<Tag>()?.Val?.Value == "magops.figure.TrackMap") != 1)
-            throw new InvalidDataException("模板必须包含一个轨迹图控件：magops.figure.TrackMap。");
-        if (!TextParts(doc).Any(x => x.Contains("{{r.ProjectName}}")))
-            throw new InvalidDataException("模板缺少项目名变量，请使用MagOps报告模板，而非旧项目成品。");
-    }
-
-    private static void FillManualAndFigure(string path, ReportSnapshot snapshot, byte[] png, IReadOnlyDictionary<string, byte[]> qualityFigures)
+    private static void FillManualAndFigure(string path, ReportSnapshot snapshot, byte[] png, IReadOnlyDictionary<string, byte[]> qualityFigures, bool external = false)
     {
         using var doc = WordprocessingDocument.Open(path, true);
         var main = doc.MainDocumentPart!;
-        if (!main.Document!.Descendants<SdtBlock>().Any(s => s.SdtProperties?.GetFirstChild<Tag>()?.Val?.Value == "magops.survey.Statistics"))
+        if ((!external || snapshot.Survey?.Mothers.Count > 0 || snapshot.StaticTrials.Count > 0 || snapshot.QualityReference != null) && !main.Document!.Descendants<SdtBlock>().Any(s => s.SdtProperties?.GetFirstChild<Tag>()?.Val?.Value == "magops.survey.Statistics"))
         {
             var control = new SdtBlock(new SdtProperties(new Tag { Val = "magops.survey.Statistics" }), new SdtContentBlock());
             var section = main.Document.Body!.Elements<SectionProperties>().LastOrDefault();
@@ -174,24 +187,23 @@ public sealed class ReportCompiler
             ["ProcessingDescription"] = snapshot.Inputs.ProcessingDescription, ["Interpretation"] = snapshot.Inputs.Interpretation,
             ["Conclusions"] = snapshot.Inputs.Conclusions, ["Warnings"] = string.Join("\n", snapshot.Warnings)
         };
-        var supplementCategories = new Dictionary<string, string[]>
-        {
-            ["Objectives"] = ["项目概况", "委托单位", "任务依据", "任务目标", "设计参数"],
-            ["Methods"] = ["人员", "设备", "规范", "基站", "现场记录", "试验条件", "作业方法"],
-            ["ProcessingDescription"] = ["处理记录", "外部处理", "成果来源"],
-            ["Interpretation"] = ["成果解释"], ["Conclusions"] = ["结论建议"]
-        };
+        bool hasDeployment = main.Document!.Descendants<SdtBlock>().Any(c => c.SdtProperties?.GetFirstChild<Tag>()?.Val?.Value == ReportFieldDictionary.TagFor("Deployment"));
+        var supplementCategories = ReportFieldDictionary.SectionCategories(hasDeployment);
+        if (hasDeployment) values["Deployment"] = "";
         foreach (var section in supplementCategories)
         {
-            var selected = snapshot.Inputs.Supplements.Where(s => section.Value.Contains(s.Category, StringComparer.Ordinal)).ToArray();
+            var selected = snapshot.Inputs.Supplements.Where(s => (!external || s.Confirmed) && section.Value.Contains(s.Category, StringComparer.Ordinal)).ToArray();
             if (selected.Length == 0) continue;
             values[section.Key] += "\n" + string.Join("\n", selected.Select(s =>
-                $"{s.Category} / {s.Name}：{s.Value} {s.Unit}（报告专用人工补录，{(s.Confirmed ? "人工已确认" : "尚未确认")}；依据：{s.Evidence}）"));
+                external ? $"{s.Name}：{s.Value} {s.Unit}" : $"{s.Category} / {s.Name}：{s.Value} {s.Unit}（报告专用人工补录，{(s.Confirmed ? "人工已确认" : "尚未确认")}；依据：{s.Evidence}）"));
         }
+        foreach (var section in supplementCategories)
+            foreach (var item in snapshot.Inputs.SharedItems.Where(i => section.Value.Contains(i.Category)))
+                values[section.Key] += "\n" + item.Label + "：" + item.Value;
         var mappedCategories = supplementCategories.Values.SelectMany(c => c).ToHashSet(StringComparer.Ordinal);
         var unmapped = snapshot.Inputs.Supplements.Where(s => !mappedCategories.Contains(s.Category)).ToArray();
         if (unmapped.Length > 0) values["Warnings"] += "\n以下补录类别未映射正文，仅保留附表：" + string.Join("、", unmapped.Select(s => s.Category + "/" + s.Name));
-        foreach (var control in main.Document!.Descendants<SdtBlock>())
+        foreach (var control in main.Document!.Descendants<SdtBlock>().ToArray())
         {
             string tag = control.SdtProperties?.GetFirstChild<Tag>()?.Val?.Value ?? "";
             var content = control.GetFirstChild<SdtContentBlock>();
@@ -213,7 +225,7 @@ public sealed class ReportCompiler
                 content.RemoveAllChildren();
                 foreach (string line in (snapshot.Facts.FirstOrDefault(f => f.Id == "processing_record")?.Value ?? "未找到唯一匹配的处理记录，请补充处理依据。").Split('\n'))
                     content.Append(ReportTemplate.P(line));
-                content.Append(ReportTemplate.P("以上为已有处理记录的转录，不代表质量验收；外部调平、化极及成图步骤需另附实际依据。"));
+                if (!external) content.Append(ReportTemplate.P("以上为已有处理记录的转录，不代表质量验收；外部调平、化极及成图步骤需另附实际依据。"));
             }
             if (tag == "magops.figure.Results")
             {
@@ -236,6 +248,11 @@ public sealed class ReportCompiler
             if (tag.StartsWith("magops.manual.") && values.TryGetValue(tag[14..], out string? text))
             {
                 content.RemoveAllChildren();
+                if (external && string.IsNullOrWhiteSpace(text))
+                {
+                    if (control.PreviousSibling() is Paragraph prev && prev.ParagraphProperties?.ParagraphStyleId?.Val=="Heading2") prev.Remove();
+                    continue;
+                }
                 foreach (string line in (string.IsNullOrWhiteSpace(text) ? "[待人工补充]" : text).Replace("\r", "").Split('\n'))
                 {
                     var paragraph = ReportTemplate.P(line);

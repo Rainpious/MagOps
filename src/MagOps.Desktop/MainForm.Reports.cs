@@ -37,12 +37,30 @@ public sealed partial class MainForm
             () => RunUi("打开报告目录", OpenReportOutputDirectory),
             () => RunUi("重新识别已有成果", () => DiscoverReportSources(true)),
             () => RunUi("引用当前设计身份", ImportReportDesign),
-            () => NavigateFeature(FeatureIds.QualityChecks));
+            () => NavigateFeature(FeatureIds.QualityChecks),
+            () => RunUi("引用共用资料", EditReportSharedSources),
+            () => RunUi("生成审阅与交付文件", () => BuildReport(true,true)),
+            label => RunUi(label, () =>
+            {
+                if (label.Contains("塔尔曼")) ManageTarmanReport(label);
+                else ManagePingquanReport(label);
+            }));
         _reportWorkspace.Changed += (_, _) => UpdateDirtyStateIndicator();
         _dirtyStateCoordinator.Register(new DirtyFeatureRegistration(FeatureIds.ReportCompilation, "报告编写",
             () => _reportWorkspace.HasChanges, () => "报告资料或人工章节尚未保存", SaveReportInputs, () => LoadReportContext(true)));
         RegisterFeatureControl(FeatureIds.ReportCompilation, _reportWorkspace, activated: () => LoadReportContext(),
             contextChanged: _ => LoadReportContext(true));
+    }
+
+    private void EditReportSharedSources()
+    {
+        if (_reportWorkspace is null || _reportLoadFailed) throw new InvalidOperationException("请先打开有效的工区报告资料。");
+        var inputs = _reportWorkspace.ReadInputs();
+        var candidates = ReportSharedSources.Read(Root, CurrentWorkareaRelativePath, CurrentWorkareaId, inputs.ReportDate);
+        using var dialog = new ReportSharedSourcesDialog(candidates, inputs.SharedItems);
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        _reportWorkspace.LoadInputs(inputs with { SharedItems = dialog.Selection, SharedSelectionReviewed = true },
+            $"已引用 {dialog.Selection.Length} 条共用资料，可继续编辑并保存。", changed: true);
     }
 
     private void OpenReportOutputDirectory()
@@ -99,6 +117,8 @@ public sealed partial class MainForm
         bool changed = _reportWorkspace.HasChanges || current != discovered.Inputs;
         _reportWorkspace.LoadInputs(discovered.Inputs, "当前工区：" + CurrentWorkareaRelativePath + Environment.NewLine + discovered.Explanation, changed);
         RefreshReportFreshness(discovered.Inputs);
+        if (showStatus && ReportSharedSources.Changes(Root, CurrentWorkareaRelativePath, CurrentWorkareaId, current.SharedItems, current.ReportDate).Count > 0)
+        { EditReportSharedSources(); return; }
         if (showStatus) SetStatus("已重新识别报告资料、处理成果和飞行评估来源；请检查后保存资料。");
     }
 
@@ -121,7 +141,7 @@ public sealed partial class MainForm
         return true;
     }
 
-    private void BuildReport(bool generate)
+    private void BuildReport(bool generate, bool delivery = false)
     {
         if (_reportWorkspace is null) return;
         string root = Root, area = CurrentWorkareaRelativePath, areaId = CurrentWorkareaId;
@@ -132,6 +152,13 @@ public sealed partial class MainForm
         {
             inputs = _reportWorkspace.ReadInputs();
             RefreshReportFreshness(inputs);
+            if (generate && ReportSharedSources.Changes(root, area, areaId, inputs.SharedItems, inputs.ReportDate).Count > 0)
+            {
+                EditReportSharedSources();
+                inputs = _reportWorkspace.ReadInputs();
+                if (ReportSharedSources.Changes(root, area, areaId, inputs.SharedItems, inputs.ReportDate).Count > 0)
+                { _reportWorkspace.ShowChecks("共用资料的取值尚待确认。"); return; }
+            }
             snapshot = BusyOperationDialog.Run(this, "检查报告资料", "正在逐行统计最终 CSV，并核对所选评估批次的完整性…",
                 () => new ReportSnapshotBuilder().Build(root, area, areaId, inputs));
         }
@@ -144,9 +171,20 @@ public sealed partial class MainForm
             snapshot.Facts.Select(f => $"{f.Id}：{f.Value} {f.Unit} [{f.Status}] — {f.Method}")) +
             Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, snapshot.Warnings));
         if (!generate) { SetStatus("报告数据检查完成；缺项见报告编写的检查结果。"); return; }
+        string? external = null;
+        if (delivery)
+        {
+            var preferences = new GlobalWorkspaceService().Load();
+            if (_saveElsewhere || (preferences.Root.Length > 0 && !preferences.AutomaticOutput))
+            {
+                try { external = ChooseCustomOutputDirectory("report_export", "保存交付压缩包"); }
+                catch (OperationCanceledException) { SetStatus("已取消本次出稿。"); return; }
+            }
+        }
         SaveReportInputs();
         var result = BusyOperationDialog.Run(this, "生成 Word 草稿", "正在填充模板、生成轨迹图并检查文档结构…",
-            () => new ReportCompiler().Build(root, area, snapshot, ReportTrackFigure.Render(snapshot.Track), ReportQualityFigures.Render(snapshot)));
+            () => new ReportCompiler().Build(root, area, snapshot, ReportTrackFigure.Render(snapshot.Track), ReportQualityFigures.Render(snapshot),delivery));
+        string? archive = external == null ? null : ReportDelivery.ExportArchive(result.Directory,external);
         RememberLatestGeneratedBusinessFile(result.DocumentPath);
         string registration = "";
         try { RegisterGeneratedBusinessFile(result.DocumentPath, "generated_report"); }
@@ -155,7 +193,7 @@ public sealed partial class MainForm
         _reportWorkspace.ShowChecks("草稿已保存：" + result.DocumentPath + Environment.NewLine +
             "请用 Word 检查中文字体、分页、表格和图件。当前为草稿，尚未通过正式报告验收。" + Environment.NewLine +
             string.Join(Environment.NewLine, snapshot.Warnings) + registration);
-        SetStatus("Word 草稿已生成：" + result.DocumentPath);
+        SetStatus(delivery ? "审阅稿、检查清单与交付候选稿已生成：" + (archive ?? result.Directory) : "Word 草稿已生成：" + result.DocumentPath);
         RefreshReportFreshness(inputs);
         Process.Start(new ProcessStartInfo(result.Directory) { UseShellExecute = true });
     }
@@ -163,7 +201,7 @@ public sealed partial class MainForm
     private void ExportReportTemplate()
     {
         using var dialog = new SaveFileDialog { Filter = "Word模板|*.docx", FileName = "MagOps_小结模板.docx", OverwritePrompt = true };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (PrepareAutomaticSave(dialog, "report_export") != DialogResult.OK) return;
         string temporary = dialog.FileName + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { ReportTemplate.Create(temporary); File.Move(temporary, dialog.FileName, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }

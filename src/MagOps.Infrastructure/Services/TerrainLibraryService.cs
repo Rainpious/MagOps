@@ -58,8 +58,9 @@ public sealed class TerrainLibraryService
         var settings=Settings();settings.DefaultDirectory=root;settings.Locations[library.LibraryId]=root;Write(SettingsPath,settings);
     }
     public IReadOnlyList<TerrainAsset> Import(IEnumerable<string> sources, CancellationToken token=default, TerrainSource? sourceInfo=null)
+        => ImportInto(Settings().DefaultDirectory, sources, token, sourceInfo);
+    internal IReadOnlyList<TerrainAsset> ImportInto(string root, IEnumerable<string> sources, CancellationToken token, TerrainSource? sourceInfo)
     {
-        string root=Settings().DefaultDirectory;
         if(string.IsNullOrWhiteSpace(root))throw new InvalidOperationException("请先设置默认地形资料库。");
         using var guard=WorkspaceFileLock.AcquireDirectory(root);
         var library=Open(root);var result=new List<TerrainAsset>();
@@ -71,7 +72,7 @@ public sealed class TerrainLibraryService
             if(existing is not null) {
                 string existingPath=SafePath(root,existing.RelativePath);
                 if(!File.Exists(existingPath)||GeneratedArtifactIdentity.Hash(existingPath)!=hash)throw new InvalidDataException("已有公共瓦片缺失或变化，请核对资料库，未自动替换。");
-                if (sourceInfo is not null && existing.Source is null) { var updated=existing with { Source=sourceInfo, HeightDatum="EGM96", Unit="m" }; library.Assets[library.Assets.IndexOf(existing)]=updated; existing=updated; }
+                if (sourceInfo is not null && existing.Source is null) { var updated=existing with { Source=sourceInfo, HeightDatum=sourceInfo.VerticalDatum, Unit="m" }; library.Assets[library.Assets.IndexOf(existing)]=updated; existing=updated; }
                 result.Add(existing);continue;
             }
             string name=Path.GetFileName(source);
@@ -104,6 +105,13 @@ public sealed class TerrainLibraryService
                 var asset = Aw3d30DownloadService.ImportArchive(archive, tile, this, token);
                 if (asset.Sha256 != pair.First.Sha256) throw new InvalidDataException("离线包引用与原始 DSM 不一致。");
                 result.Add(asset);
+            }
+            else if (pair.First.Source is { Provider: CopernicusDem.Glo30 or CopernicusDem.Glo90 } cop)
+            {
+                var tile = CopernicusDem.VerifyReceipt(Path.GetDirectoryName(Path.GetFullPath(path))!, cop, pair.First.Sha256);
+                string root = Settings().DefaultDirectory;
+                if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("请先设置公共地形库。");
+                result.Add(CopernicusDem.Register(pair.Second, tile, this, root, cop.DownloadedAt, token));
             }
             else result.AddRange(Import([pair.Second], token));
         }
@@ -150,6 +158,12 @@ public sealed class TerrainLibraryService
                 string originalRoot = !string.IsNullOrWhiteSpace(selection.PortableDirectory) ? Path.GetDirectoryName(Path.GetFullPath(selectionPath))!
                     : Settings().Locations.TryGetValue(pair.First.LibraryId, out string? location) ? location : throw new InvalidDataException("来源库不可用。");
                 string receiptPath = SafePath(originalRoot, source.EvidenceRelativePath);
+                if (source.Provider is CopernicusDem.Glo30 or CopernicusDem.Glo90)
+                {
+                    CopernicusDem.VerifyReceipt(originalRoot, source, pair.First.Sha256);
+                    AtomicFileWriter.Write(SafePath(destination, source.EvidenceRelativePath), s => { using var input = File.OpenRead(receiptPath); input.CopyTo(s); });
+                    continue;
+                }
                 var receipt = Read<Aw3d30ReceiptDocument>(receiptPath);
                 if (receipt.Schema != "magops-aw3d30-source-1" || receipt.Files.Count == 0) throw new InvalidDataException("AW3D30 来源清单缺失或不完整。");
                 string originalFamily = Path.GetDirectoryName(receiptPath)!;

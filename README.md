@@ -6,7 +6,7 @@ MagOps is a Windows desktop workspace for magnetic-survey project organization, 
 
 ## 下载与运行
 
-从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.58，仍在持续开发和实机验收。
+从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.59，仍在持续开发和实机验收。
 
 ## 报告编写
 
@@ -44,9 +44,9 @@ MagOps 可检查已支持的 GSM 原始记录；在明确 session、时间及选
 
 边界、测线和外部成果可能采用不同坐标表达；如果每次都手动整理经纬度、确认坐标轴和中央经线，再逐张寻找覆盖工区的地形瓦片，准备工作会被反复打断。
 
-MagOps 集中提供坐标转换、空间文件检查、边界与面积处理，以及共享 GeoTIFF 地形库。AW3D30 下载可按范围检查本地覆盖并补齐缺失瓦片，让多个项目复用同一公共库，减少重复下载和散落的地形副本。
+MagOps 集中提供坐标转换、空间文件检查、边界与面积处理，以及共享 GeoTIFF 地形库。地形下载可按范围检查本地覆盖并补齐缺失瓦片，让多个项目复用同一公共库，减少重复下载和散落的地形副本。
 
-坐标系、时间和高程基准仍需明确确认。AW3D30 是 DSM，不能直接等同于裸地 DTM；地形覆盖也不意味着飞行高度与安全条件已经核验。
+坐标系、时间和高程基准仍需明确确认。Copernicus DEM 与 AW3D30 都是 DSM，不能直接等同于裸地 DTM；地形覆盖也不意味着飞行高度与安全条件已经核验。
 
 ### 工区与成果管理
 
@@ -60,9 +60,11 @@ MagOps 将资料登记、工区归属、成果身份和文件变化检查放在�
 
 ## 地形设置
 
-在“绘制航线 → 地形库 → AW3D30 下载设置”中设置自己的 JAXA 账号及公共库路径。路径可复制，点击“更改…”选择其他库。“自动下载缺失地形”默认开启，已有手动设置会保留。账号凭据由 Windows 当前用户加密保存在本机，不随项目导出；本仓库及发行包不提供共享账号。
+打开“绘制航线 → 地形库 → 地形下载设置”，选定公共库后输入 WGS84 范围。默认匿名下载 Copernicus DEM GLO-30（约 30 米），也可选择 GLO-90（约 90 米）。已有瓦片按来源和 SHA-256 复用。点击“保存设置”可更改默认数据源和自动补下载选项。选择 JAXA AW3D30 时显示该数据源的账号设置。
 
-AW3D30 是地表模型（DSM），不等同于裸地 DTM。下载数据需遵守 [JAXA 数据政策](https://earth.jaxa.jp/en/data/policy/) 与来源标注要求；软件 MIT 协议不替代数据许可。
+Copernicus DEM 提供 EGM2008 米制地表高程。下载后可在“按当前范围匹配瓦片”中选用，并随离线瓦片包携带来源记录。公开源缺片时提示检查覆盖范围。两种分辨率和不同高程基准的资料应分别选用。[数据目录](https://registry.opendata.aws/copernicus-dem/) · [Copernicus 许可与署名](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM) · [JAXA 数据政策](https://earth.jaxa.jp/en/data/policy/)
+
+命令行可用 `plan-dem --input bounds.json` 预览瓦片，用 `ensure-dem --input bounds.json` 补入已设置的默认公共库。例：`{"west":12.2,"south":47.2,"east":12.4,"north":47.4}`。可加 `"resolution":90` 选择 GLO-90。查询单点时令东西经度相等、南北纬度相等。
 
 ## 当前进度
 

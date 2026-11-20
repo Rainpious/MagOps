@@ -30,6 +30,27 @@ internal static class Program
     }
 
     private static ApplicationResult<object?> ServiceResult(Func<object> run) => ApplicationResult<object?>.Success("op-" + Guid.NewGuid().ToString("N"), null, run());
+    private static object CopernicusCommand(string? path, bool download, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("需要 --input 范围 JSON。");
+        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        var b = json.RootElement;
+        var names = new HashSet<string> { "west", "south", "east", "north" };
+        int resolution = 30;
+        if (b.ValueKind != JsonValueKind.Object) throw new ArgumentException("需要范围 JSON 对象。");
+        if (b.TryGetProperty("resolution", out var r))
+        {
+            names.Add("resolution");
+            if (r.ValueKind != JsonValueKind.Number || !r.TryGetInt32(out resolution)) throw new ArgumentException("resolution 须为 30 或 90。");
+        }
+        foreach (var p in b.EnumerateObject())
+            if (!names.Remove(p.Name) || p.Value.ValueKind != JsonValueKind.Number) throw new ArgumentException("范围字段无效或重复。");
+        if (names.Count != 0) throw new ArgumentException("需要 west、south、east、north 四个数字。");
+        var request = new TerrainCoverageRequest(b.GetProperty("west").GetDouble(), b.GetProperty("south").GetDouble(),
+            b.GetProperty("east").GetDouble(), b.GetProperty("north").GetDouble());
+        return download ? CopernicusDem.EnsureAsync(request, resolution, token: token).GetAwaiter().GetResult()
+            : CopernicusDem.Plan(request, resolution);
+    }
     private static IReadOnlyList<Aw3d30Tile> ReadTerrainPlan(string path)
     {
         using var json = JsonDocument.Parse(File.ReadAllText(path)); var b = json.RootElement;
@@ -86,7 +107,7 @@ internal static class Program
         if (string.IsNullOrWhiteSpace(command) || command.Equals("help", StringComparison.OrdinalIgnoreCase) ||
             args.Contains("--help", StringComparer.OrdinalIgnoreCase) || args.Contains("-h", StringComparer.OrdinalIgnoreCase))
             return PrintUsage(json, 0);
-        if (string.IsNullOrWhiteSpace(root) && command is not "analyze-segmentation-candidates" and not "scan-input-folder" and not "classify-source-files" and not "inspect-magnetic-data" and not "inspect-ground-magnetic-data" and not "trial-ground-diurnal" and not "export-ground-diurnal" and not "inspect-intermediate-table" and not "terrain-point-coverage" and not "version" and not "plan-aw3d30" and not "download-aw3d30" and not "ensure-aw3d30" and not "inspect-processing-directory" and not "validate-project-layout" and not "preview-execution" and not "preview-coverage" and not "preview-production-selection" and not "preview-t0")
+        if (string.IsNullOrWhiteSpace(root) && command is not "analyze-segmentation-candidates" and not "scan-input-folder" and not "classify-source-files" and not "inspect-magnetic-data" and not "inspect-ground-magnetic-data" and not "trial-ground-diurnal" and not "export-ground-diurnal" and not "inspect-intermediate-table" and not "terrain-point-coverage" and not "version" and not "plan-dem" and not "ensure-dem" and not "plan-aw3d30" and not "download-aw3d30" and not "ensure-aw3d30" and not "inspect-processing-directory" and not "validate-project-layout" and not "preview-execution" and not "preview-coverage" and not "preview-production-selection" and not "preview-t0")
             return PrintUsage(json);
 
         var queries = new WorkspaceQueries(new JsonStore());
@@ -104,6 +125,8 @@ internal static class Program
             "preview-external-package" => ServiceResult(() => ExternalPackageService.Preview(root!, input!, ExternalPackageService.ReadDeclaration(GetOption(args, "--mapping") ?? throw new ArgumentException("需要 --mapping 声明。")), cancellation)),
             "register-external-package" => ServiceResult(() => ExternalPackageService.Register(root!, input!, GetOption(args, "--output") ?? throw new ArgumentException("需要项目内新输出目录 --output。"), ExternalPackageService.ReadDeclaration(GetOption(args, "--mapping") ?? throw new ArgumentException("需要 --mapping 声明。")), cancellation)),
             "inspect-external-package" => ServiceResult(() => ExternalPackageService.Inspect(root!, input!)),
+            "plan-dem" => ServiceResult(() => CopernicusCommand(input, false, cancellation)),
+            "ensure-dem" => ServiceResult(() => CopernicusCommand(input, true, cancellation)),
             "plan-aw3d30" => ServiceResult(() => ReadTerrainPlan(input!)),
             "ensure-aw3d30" => ServiceResult(() =>
             {
@@ -170,10 +193,10 @@ internal static class Program
     private static int PrintUsage(bool json, int exitCode = 2)
     {
         string usage = "地面检查/试算：inspect-ground-magnetic-data 或 trial-ground-diurnal --input <原始目录> [--mapping <JSON>] [--include-records]；导出：export-ground-diurnal --input <目录> --mapping <JSON> --output <新目录>。用法: MagOps.Cli <command> [--project <root>] [--input <path>] [--json]；" +
-            "地形：plan-aw3d30 / download-aw3d30 / ensure-aw3d30 --input <范围JSON>（账号读取本机加密存储）；外部登记：preview-external-package / register-external-package --project <项目> --input <文件族目录> --mapping <声明JSON> [--output <项目内新目录>]；inspect-external-package --project <项目> --input <external-package.json>；preview-project-change --project <项目> --input <预览JSON>。" +
+            "地形：plan-dem / ensure-dem --input <范围JSON>（Copernicus 匿名下载，resolution 默认 30，可选 90）；plan-aw3d30 / download-aw3d30 / ensure-aw3d30 --input <范围JSON>（账号读取本机加密存储）；外部登记：preview-external-package / register-external-package --project <项目> --input <文件族目录> --mapping <声明JSON> [--output <项目内新目录>]；inspect-external-package --project <项目> --input <external-package.json>；preview-project-change --project <项目> --input <预览JSON>。" +
             "analyze-segmentation-candidates --input <配置JSON> [--decisions <补丁JSON>] [--output <新目录>] [--include-records]。";
         var result = exitCode == 0 ? ApplicationResult<object?>.Success($"op-{Guid.NewGuid():N}", null,
-            new { usage, commands = new[] { "version", "inspect-business-facts", "preview-project-change", "preview-external-package", "register-external-package", "inspect-external-package", "plan-aw3d30", "download-aw3d30", "ensure-aw3d30", "get-project-context", "list-workareas", "list-artifacts", "production-overview", "production-run",
+            new { usage, commands = new[] { "version", "inspect-business-facts", "preview-project-change", "preview-external-package", "register-external-package", "inspect-external-package", "plan-dem", "ensure-dem", "plan-aw3d30", "download-aw3d30", "ensure-aw3d30", "get-project-context", "list-workareas", "list-artifacts", "production-overview", "production-run",
                 "scan-input-folder", "classify-source-files", "inspect-magnetic-data", "inspect-ground-magnetic-data", "trial-ground-diurnal", "export-ground-diurnal", "inspect-intermediate-table", "terrain-point-coverage",
                 "inspect-processing-directory", "validate-project-layout", "preview-execution", "preview-coverage",
                 "preview-production-selection", "preview-t0", "analyze-segmentation-candidates" } }) :
@@ -231,7 +254,7 @@ internal static class Program
             return;
         }
         Console.WriteLine($"{command}: OK ({result.OperationId})");
-        if ((command.Equals("analyze-segmentation-candidates", StringComparison.OrdinalIgnoreCase) || command is "version" or "preview-project-change" or "preview-external-package" or "register-external-package" or "inspect-external-package" or "plan-aw3d30" or "download-aw3d30" or "ensure-aw3d30"))
+        if ((command.Equals("analyze-segmentation-candidates", StringComparison.OrdinalIgnoreCase) || command is "version" or "preview-project-change" or "preview-external-package" or "register-external-package" or "inspect-external-package" or "plan-dem" or "ensure-dem" or "plan-aw3d30" or "download-aw3d30" or "ensure-aw3d30"))
         { Console.WriteLine(JsonSerializer.Serialize(result.Result, JsonOptions)); return; }
         if (result.Result is WorkspaceContextResult context)
             Console.WriteLine($"项目: {context.Workspace.DisplayName}; 工区: {context.Workareas.Count}");

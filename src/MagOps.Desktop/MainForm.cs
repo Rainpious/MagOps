@@ -520,7 +520,7 @@ public sealed partial class MainForm : Form
                         "选择 KML 地形",
                         () => ChooseRouteTerrainDem(
                             path)),
-                DownloadTerrain: () => RunUi("下载 AW3D30", DownloadAw3d30Terrain),
+                DownloadTerrain: () => RunUi("下载地形", DownloadAw3d30Terrain),
                 ManageTerrainLibrary: () => RunUi("设置默认地形库", ConfigureDefaultTerrainLibrary),
                 MatchTerrainTiles: () => RunUi("匹配地形瓦片", MatchRouteTerrainTiles),
                 PackageTerrainTiles: () => RunUi("打包地形瓦片", PackageRouteTerrainTiles),

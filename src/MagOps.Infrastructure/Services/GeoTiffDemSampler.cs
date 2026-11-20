@@ -20,6 +20,9 @@ public sealed record GeoTiffDemInfo(
 public sealed class GeoTiffDemSampler
 {
     private readonly byte[] _bytes;
+    private readonly int _tileWidth, _tileHeight;
+    private readonly Dictionary<int, byte[]> _decodedTiles = new();
+    private readonly Queue<int> _tileOrder = new();
     private readonly bool _littleEndian;
     private readonly Dictionary<ushort, TiffEntry> _entries = [];
     private readonly ulong[] _stripOffsets;
@@ -69,9 +72,18 @@ public sealed class GeoTiffDemSampler
         _rowsPerStrip = checked((int)ReadSingleUnsignedOrDefault(278, (ulong)_height));
         _sampleFormat = checked((int)ReadSingleUnsignedOrDefault(339, 1));
 
-        if (compression != 1)
-            throw new InvalidDataException(
-                $"当前航线 KML 地形采样只支持未压缩 GeoTIFF（Compression=1）；当前 Compression={compression}。请先转换为未压缩 TIFF。 ");
+        bool tiled = _entries.ContainsKey(324);
+        if (tiled)
+        {
+            _tileWidth = checked((int)ReadSingleUnsigned(322, "TileWidth"));
+            _tileHeight = checked((int)ReadSingleUnsigned(323, "TileLength"));
+            if (compression != 8 || ReadSingleUnsignedOrDefault(317, 1) != 3 ||
+                _bitsPerSample != 32 || _sampleFormat != 3 || _tileWidth <= 0 || _tileHeight <= 0 ||
+                (long)_tileWidth * _tileHeight > 4096L * 4096)
+                throw new InvalidDataException("分块地形须为 Deflate 压缩、浮点预测的 Float32 GeoTIFF。");
+        }
+        else if (compression != 1)
+            throw new InvalidDataException("不支持此条带 GeoTIFF 压缩方式。");
         if (_samplesPerPixel != 1)
             throw new InvalidDataException("当前航线 KML 地形采样只支持单波段 GeoTIFF。 ");
         bool supportedSampleType =
@@ -81,11 +93,17 @@ public sealed class GeoTiffDemSampler
             throw new InvalidDataException(
                 $"当前航线 KML 地形采样支持 UInt16 / Int16 / Float32；当前 BitsPerSample={_bitsPerSample}, SampleFormat={_sampleFormat}。 ");
 
-        _stripOffsets = ReadUnsignedArray(273, "StripOffsets");
-        _stripByteCounts = ReadUnsignedArray(279, "StripByteCounts");
+        _stripOffsets = ReadUnsignedArray(tiled ? (ushort)324 : (ushort)273, "Offsets");
+        _stripByteCounts = ReadUnsignedArray(tiled ? (ushort)325 : (ushort)279, "ByteCounts");
         if (_stripOffsets.Length == 0 || _stripOffsets.Length != _stripByteCounts.Length)
             throw new InvalidDataException("GeoTIFF StripOffsets / StripByteCounts 无效。 ");
 
+        if (tiled && (_width <= 0 || _height <= 0 ||
+            (1L + (_width - 1) / _tileWidth) * (1L + (_height - 1) / _tileHeight) != _stripOffsets.Length))
+            throw new InvalidDataException("GeoTIFF 分块数量与图像尺寸不符。");
+        if (tiled)
+            for (int i = 0; i < _stripOffsets.Length; i++)
+                EnsureRange(checked((int)_stripOffsets[i]), checked((int)_stripByteCounts[i]));
         double[] pixelScale = ReadDoubleArray(33550, "ModelPixelScaleTag");
         double[] tiePoints = ReadDoubleArray(33922, "ModelTiepointTag");
         if (pixelScale.Length < 2 || tiePoints.Length < 6)
@@ -108,10 +126,11 @@ public sealed class GeoTiffDemSampler
         _rasterType = rasterType;
         _noData = TryReadNoData();
 
-        double minLon = RasterToLongitude(0);
-        double maxLon = RasterToLongitude(_width);
-        double maxLat = RasterToLatitude(0);
-        double minLat = RasterToLatitude(_height);
+        double edge = _rasterType == 2 ? -0.5 : 0;
+        double minLon = RasterToLongitude(edge);
+        double maxLon = RasterToLongitude(_width + edge);
+        double maxLat = RasterToLatitude(edge);
+        double minLat = RasterToLatitude(_height + edge);
         Info = new GeoTiffDemInfo(
             _width,
             _height,
@@ -247,6 +266,7 @@ public sealed class GeoTiffDemSampler
 
     private double ReadPixel(int column, int row)
     {
+        if (_tileWidth > 0) return ReadTiledFloat(column, row);
         int stripIndex = row / _rowsPerStrip;
         int rowWithinStrip = row % _rowsPerStrip;
         if (stripIndex < 0 || stripIndex >= _stripOffsets.Length)
@@ -267,6 +287,39 @@ public sealed class GeoTiffDemSampler
             (32, 3) => ReadSingle(i),
             _ => throw new InvalidDataException("不支持的 GeoTIFF 像元类型。 ")
         };
+    }
+
+    private float ReadTiledFloat(int column, int row)
+    {
+        int tile = (row / _tileHeight) * (1 + (_width - 1) / _tileWidth) + column / _tileWidth;
+        byte[] planes;
+        lock (_decodedTiles)
+        {
+            if (!_decodedTiles.TryGetValue(tile, out var cached))
+            {
+                int start = checked((int)_stripOffsets[tile]);
+                int size = checked((int)_stripByteCounts[tile]);
+                EnsureRange(start, size);
+                using var packed = new MemoryStream(_bytes, start, size, false);
+                using var inflater = new System.IO.Compression.ZLibStream(packed, System.IO.Compression.CompressionMode.Decompress);
+                cached = new byte[checked(_tileWidth * _tileHeight * 4)];
+                inflater.ReadExactly(cached);
+                if (inflater.ReadByte() != -1) throw new InvalidDataException("地形分块解压长度不符。");
+                // TIFF floating-point predictor stores four significance planes with one byte delta per sample.
+                int stride = _tileWidth * 4;
+                for (int offset = 0; offset < cached.Length; offset += stride)
+                    for (int i = offset + 1; i < offset + stride; i++)
+                        cached[i] = unchecked((byte)(cached[i] + cached[i - 1]));
+                if (_tileOrder.Count == 2) _decodedTiles.Remove(_tileOrder.Dequeue());
+                _tileOrder.Enqueue(tile);
+                _decodedTiles.Add(tile, cached);
+            }
+            planes = cached;
+        }
+        int p = (row % _tileHeight) * _tileWidth * 4 + column % _tileWidth;
+        int bits = planes[p] << 24 | planes[p + _tileWidth] << 16 |
+            planes[p + 2 * _tileWidth] << 8 | planes[p + 3 * _tileWidth];
+        return BitConverter.Int32BitsToSingle(bits);
     }
 
     private void ReadIfd(uint ifdOffset)

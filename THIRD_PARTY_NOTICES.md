@@ -10,6 +10,10 @@ Official reference: https://www.ncei.noaa.gov/products/international-geomagnetic
 
 Self-contained Windows releases include Microsoft .NET runtime components. Their license and notices are distributed in the `licenses` directory of the release ZIP. See https://github.com/dotnet/runtime and https://github.com/dotnet/windowsdesktop.
 
+## Copernicus DEM
+
+The application downloads GLO-30 Public or GLO-90 on request from the public AWS collection. Each local source receipt identifies the product, original object URL, download time, checksum and attribution. The release contains a synthetic regression-test raster in its source tree. Refer to the [Copernicus product and licensing page](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM) and the [AWS data catalog](https://registry.opendata.aws/copernicus-dem/).
+
 ## AW3D30
 
 AW3D30 data are supplied by JAXA and its partners under their own data terms. No terrain tiles or account credentials are included in this repository or release. Downloads retain their source information; users are responsible for required credits and applicable notifications.

@@ -892,7 +892,7 @@ internal sealed partial class RouteWorkspaceControl : UserControl
             path => FileDropSupport.HasExtension(path, ".tif", ".tiff") || path.EndsWith(".terrain.json",StringComparison.OrdinalIgnoreCase));
         terrainRow.Controls.Add(chooseRouteTerrain);
         terrainRow.Controls.Add(CommandMenu("地形库 ▾",
-            ("AW3D30 下载设置", () => _actions.DownloadTerrain()),
+            ("地形下载设置", () => _actions.DownloadTerrain()),
             ("公共库设置", () => _actions.ManageTerrainLibrary()),
             ("按当前范围匹配瓦片", () => _actions.MatchTerrainTiles()),
             ("打包当前工区瓦片", () => _actions.PackageTerrainTiles())));

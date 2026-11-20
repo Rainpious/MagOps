@@ -42,7 +42,7 @@ public sealed partial class MainForm
             if (!result.Ok) throw new InvalidDataException(string.Join("\r\n", result.Errors.Select(e => e.Message)));
             view.Text = JsonSerializer.Serialize(result.Result, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
         })));
-        actions.Controls.Add(Button("按原始点下载 AW3D30", (_, _) => RunUi("下载 AW3D30", () =>
+        actions.Controls.Add(Button("按原始点下载地形", (_, _) => RunUi("下载地形", () =>
         {
             if (source.Length == 0) throw new InvalidOperationException("请先导入表格和映射。");
             string input = source, config = mapping;

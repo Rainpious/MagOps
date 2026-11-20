@@ -36,6 +36,7 @@ internal static partial class Program
         var tests = new (string Name, Action Test)[]
         {
             ("Track-only segmentation, reference classification and production replay", TestTrackOnlySegmentation),
+            ("Copernicus default, grid ownership and compressed terrain sampling", TestCopernicusDem),
             ("DMS hyphen format", TestDmsHyphen),
             ("DMS hemisphere and six-column input", TestDmsHemisphereAndSixColumns),
             ("DMS point-id longitude latitude table paste", TestDmsPointIdTablePaste),

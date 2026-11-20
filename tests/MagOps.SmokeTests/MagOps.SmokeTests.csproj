@@ -13,6 +13,7 @@
     <Content Include="..\..\config\geomagnetics\igrf.dat" Link="config\geomagnetics\igrf.dat">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\fixtures\synthetic-cop-dem.tif" Link="fixtures\synthetic-cop-dem.tif" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\fixtures\synthetic_boundary.kml" Link="fixtures\synthetic_boundary.kml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

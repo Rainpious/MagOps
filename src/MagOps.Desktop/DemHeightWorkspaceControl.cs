@@ -57,7 +57,7 @@ internal sealed class DemHeightWorkspaceControl : UserControl
         _calculate = UiComponents.Button("计算离地高度", async (_, _) => await CalculateAsync(), UiButtonRole.Primary);
         _export = UiComponents.Button("导出明细", async (_, _) => await ExportAsync());
         actions.Controls.AddRange([_calculate, _export, _automatic]);
-        actions.Controls.Add(UiComponents.Button("下载 AW3D30", (_, _) => { using var dialog = new Aw3d30DownloadDialog(); dialog.ShowDialog(this); }));
+        actions.Controls.Add(UiComponents.Button("下载地形", (_, _) => { using var dialog = new Aw3d30DownloadDialog(); dialog.ShowDialog(this); }));
         actions.Controls.Add(UiComponents.HelpLabel("基于 DEM 的估计；不依赖分线、KML 或磁通道，不改变原始海拔和测线归属。"));
         var choose = UiComponents.Button("选择 DEM（可拖入）…", (_, _) => ChooseDem());
         foreach (var target in new Control[] { choose, _path })
@@ -84,7 +84,7 @@ internal sealed class DemHeightWorkspaceControl : UserControl
         _settings.Controls.Add(_evidence, 1, 2); _settings.SetColumnSpan(_evidence, 3);
         _settings.Controls.Add(_confirmed, 0, 3); _settings.SetColumnSpan(_confirmed, 4);
         _path.ShortcutsEnabled = true; // Home/End, selection and Ctrl+C expose the complete read-only path.
-        _path.AccessibleDescription = "未压缩、单波段、EPSG:4326 GeoTIFF；不自动转换基准。";
+        _path.AccessibleDescription = "单波段 EPSG:4326 GeoTIFF（未压缩条带或 Copernicus COG）；不自动转换基准。";
         var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         _filter.Items.AddRange(["全部记录", "已计算", "缺项记录", "负离地高度"]); _filter.SelectedIndex = 0;
         var view = new ComboBox { Width = 140, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -235,7 +235,7 @@ internal sealed class DemHeightWorkspaceControl : UserControl
         _snapshot = snapshot;
         _export.Enabled = snapshot is { DemSha256.Length: > 0 } && !_configurationDirty;
         var q = snapshot?.Summary;
-        _summary.Text = q is null ? "尚未计算。支持未压缩、单波段、EPSG:4326 GeoTIFF；未确认基准时仅提供地形高程。离地高度缺项不阻断分线。" :
+        _summary.Text = q is null ? "尚未计算。支持单波段 EPSG:4326 GeoTIFF（未压缩条带或 Copernicus COG）；未确认基准时仅提供地形高程。离地高度缺项不阻断分线。" :
             $"原始输入 {q.InputCount:N0} 点；地形可采样 {snapshot!.Points.Count(p => p.TerrainElevationM.HasValue):N0} 点；离地高度可计算 {q.ValidCount:N0} 点；负值 {q.NegativeCount:N0} 点。\r\n" +
             (q.ValidCount == 0 ? "暂无可计算离地高度。" + PendingConditions(snapshot) :
                 $"平均 {Format(q.MeanM)} m；最小 {Format(q.MinM)} m；最大 {Format(q.MaxM)} m。") + "\r\n" +

@@ -2,6 +2,7 @@
 
 public sealed class Aw3d30DownloadPreferences
 {
+    public string DownloadSource { get; set; } = CopernicusDem.Glo30;
     public bool DownloadMissingOnMatch { get; set; } = true;
     internal static string? StoragePathOverride { get; set; }
     public static string Path => StoragePathOverride ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MagOps", "aw3d30-settings.json");

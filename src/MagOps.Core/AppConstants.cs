@@ -3,7 +3,7 @@ namespace MagOps.Core;
 public static class AppConstants
 {
     public const string SchemaVersion = "0.4";
-    public const string AppVersion = "0.9.59";
+    public const string AppVersion = "0.9.60";
 
     public static readonly string[] ProjectStatuses =
     [

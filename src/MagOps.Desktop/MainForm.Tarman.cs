@@ -41,6 +41,64 @@ public sealed partial class MainForm
             SetStatus("已导出：" + dest.FileName);
             return;
         }
+        if (action == "塔尔曼第二轮装配")
+        {
+            using var mode = new Form { Text = "塔尔曼第二轮装配", StartPosition = FormStartPosition.CenterParent,
+                ClientSize = new Size(720, 350), MinimizeBox = false };
+            var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            mode.Controls.Add(panel);
+            panel.Controls.Add(new Label { Text = "装配位置及所需来源", AutoSize = true });
+            foreach (var s in TarmanReport.AssemblySlots)
+                panel.Controls.Add(new Label { Text = s.Position + "　" + s.Input, AutoSize = true });
+            var actions = new FlowLayoutPanel { AutoSize = true };
+            var install = new Button { Text = "建立框架", AutoSize = true, DialogResult = DialogResult.Yes };
+            var import = new Button { Text = "从已有报告试填卷首及人员表…", AutoSize = true, DialogResult = DialogResult.OK };
+            var cancel = new Button { Text = "取消", AutoSize = true, DialogResult = DialogResult.Cancel };
+            actions.Controls.AddRange([install, import, cancel]);panel.Controls.Add(actions);mode.CancelButton = cancel;
+            var choice = mode.ShowDialog(this);
+            if (choice != DialogResult.OK && choice != DialogResult.Yes) return;
+            string? sourcePath = null;
+            if (choice == DialogResult.OK)
+            {
+                using var source = new OpenFileDialog { Title = "选择含署名表及项目组人员表的原报告", Filter = "Word 报告 (*.docx)|*.docx" };
+                if (source.ShowDialog(this) != DialogResult.OK) return;
+                sourcePath = source.FileName;
+            }
+            var assemblyPreview = report.PreviewAssembly(path,sourcePath);
+            string[] keys = [];
+            if (sourcePath != null)
+            {
+                var accepted = ConfirmWorkfileChanges("历史报告试填 · 卷首、署名及表 4-1",
+                    assemblyPreview.Changes.Select(c => new WorkfileChangeRow(c.Key,c.Label,c.Previous,c.Current,c.Source,c.Suggested,true,
+                        c.Key == "staff" ? "逐行核对；保留原表人工备注" : "勾选后更新所有同字段引用")),
+                    "历史示例来源：" + sourcePath + "。年龄按原报告记载，署名与项目岗位分别采用。其余位置记录历史对照来源。\n" + string.Join("；",assemblyPreview.HistoricalReferences));
+                if (accepted == null || accepted.Length == 0) return;
+                keys = accepted;
+            }
+            report.UpdateAssembly(path,assemblyPreview,keys);
+            SetStatus(sourcePath==null ? "已建立第二轮框架：" + path : "已写入所选历史报告示例：" + path);
+            return;
+        }
+        if (action == "更新塔尔曼图 5-1 偏航距")
+        {
+            var areaDir = Path.GetFullPath(CurrentWorkareaRelativePath, Root);
+            using var route = new OpenFileDialog { Title = "选择本工区航线结果清单", InitialDirectory = areaDir, Filter = "航线结果清单|*route-v25.json|JSON|*.json" };
+            if (route.ShowDialog(this) != DialogResult.OK) return;
+            var inputCsv = ReportInputStore.Load(Root, CurrentWorkareaRelativePath).ProductionCsv;
+            using var batch = new OpenFileDialog { Title = "选择处理批次的日变改正清单", InitialDirectory = File.Exists(inputCsv) ? Path.GetDirectoryName(inputCsv) : areaDir,
+                Filter = "日变改正清单|*manifest*.json|JSON|*.json" };
+            if (batch.ShowDialog(this) != DialogResult.OK) return;
+            var view = BusyOperationDialog.Run(this, "核对图 5-1", "核实设计端点和实飞点，计算逐线平均偏航距…",
+                () => report.PreviewOffsetFigure(path, route.FileName, batch.FileName));
+            var keys = ConfirmWorkfileChanges("图 5-1 · 按设计顺序逐线绘柱", view.Changes.Select(c =>
+                new WorkfileChangeRow(c.Key,c.Label,c.Previous,c.Current,c.Source,c.Suggested,true,
+                    c.Key == "chart" ? "采用后写入嵌入式图表和来源记录" : "取消勾选可保留 Word 当前文字")),
+                $"审阅试算 · {view.Batch.Design} · {view.Batch.Summary}。逐线均值最大线：{view.Batch.Maximum.Name}。来源：{batch.FileName}");
+            if(keys == null || !keys.Contains("chart")) return;
+            BusyOperationDialog.Run(this,"更新图 5-1","写入工作稿与来源记录…",() => {report.UpdateOffsetFigure(path,view,keys);return true;});
+            SetStatus("已更新图 5-1 审阅试算和选定正文：" + path);
+            return;
+        }
         if (action == "更新塔尔曼日变站选址及基值")
         {
             if (_reportWorkspace.HasChanges) SaveReportInputs();

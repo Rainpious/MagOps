@@ -54,7 +54,7 @@ internal sealed class ReportWorkspaceControl : UserControl
                 button.Click += (_, _) => workingReport(button.Text);
                 actions.Controls.Add(button);
             }
-            foreach (var label in new[] { "更新塔尔曼表 4-3 探头参数", "更新塔尔曼日变基站", "更新塔尔曼日变站选址及基值" })
+            foreach (var label in new[] { "更新塔尔曼表 4-3 探头参数", "更新塔尔曼日变基站", "更新塔尔曼日变站选址及基值", "更新塔尔曼图 5-1 偏航距", "塔尔曼第二轮装配" })
             {
                 var button = new Button { Text = label, AutoSize = true, Visible = false };
                 format.SelectedIndexChanged += (_, _) => button.Visible = Equals(format.SelectedItem, "塔尔曼");

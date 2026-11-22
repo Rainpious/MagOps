@@ -6,7 +6,11 @@ MagOps is a Windows desktop workspace for magnetic-survey project organization, 
 
 ## 下载与运行
 
-从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.59，仍在持续开发和实机验收。
+从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.60，仍在持续开发和实机验收。
+
+## 切割线作业航线
+
+进入“绘制航线 → 切割线设计”，从工区边界布设成对切割线，在架次列表或地图上选择执行段。架次旁分别显示含起降往返的预计飞行航程和写入 KML 的作业航程。点击“按架次导出 KML”，每个架次得到一个文件，按飞行顺序连接切割线执行段。启用地形高程时，程序使用工区 DEM 和设置的目标离地高度沿线取高。
 
 ## 报告编写
 

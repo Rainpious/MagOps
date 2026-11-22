@@ -100,7 +100,7 @@ public static class SurveyRegionGeometryMath
     public static bool ContainsOrOnBoundary(
         SurveyRegionGeometry region,
         SurveyBoundaryPoint point,
-        double tolerance = 1e-7)
+        double tolerance = 1e-7, bool includeBoundary = true)
     {
         ArgumentNullException.ThrowIfNull(region);
         if (tolerance < 0 || !double.IsFinite(tolerance))
@@ -112,14 +112,21 @@ public static class SurveyRegionGeometryMath
             if (outer == PointRingLocation.Outside)
                 continue;
             if (outer == PointRingLocation.Boundary)
-                return true;
+            {
+                if (includeBoundary) return true;
+                continue;
+            }
 
             bool excluded = false;
             foreach (IReadOnlyList<SurveyBoundaryPoint> hole in polygon.Holes)
             {
                 PointRingLocation inner = Locate(point, hole, tolerance);
                 if (inner == PointRingLocation.Boundary)
-                    return true; // boundary itself is legal; the hole interior is not.
+                {
+                    if (includeBoundary) return true;
+                    excluded = true;
+                    break;
+                }
                 if (inner == PointRingLocation.Inside)
                 {
                     excluded = true;

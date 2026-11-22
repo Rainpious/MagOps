@@ -106,7 +106,7 @@ public static class GeneratedArtifactIdentity
             bool spatialReferenceStale = ProductionSnapshotService.IsProjectSpatialReferenceStale(path, metadata);
             string? warning = productionStale
                 ? "生产选择或异常区间版本已变化，旧成果需重新生成。"
-                : spatialReferenceStale ? "项目中央经线已变化，旧空间成果需重新计算或复核。" : null;
+                : spatialReferenceStale ? "空间基准的中央经线已变化，旧空间成果需重新计算或复核。" : null;
             return new("VERIFIED", sidecar, metadata, warning,
                 IsPreviousVersion(path, metadata.ArtifactId))
             { IsProductionStale = productionStale, IsProjectSpatialReferenceStale = spatialReferenceStale };
@@ -129,7 +129,7 @@ public static class GeneratedArtifactIdentity
         if (string.IsNullOrWhiteSpace(metadata.ProjectId) || string.IsNullOrWhiteSpace(savedFingerprint) ||
             savedFingerprint == "UNAVAILABLE")
             return "UNVERIFIED";
-        if (!TryReadProjectSpatialReference(path, out string projectId, out string currentFingerprint))
+        if (!TryReadProjectSpatialReference(path, metadata.WorkareaId, out string projectId, out string currentFingerprint))
             return "UNVERIFIED";
         if (!projectId.Equals(metadata.ProjectId, StringComparison.OrdinalIgnoreCase)) return "STALE";
 
@@ -141,7 +141,7 @@ public static class GeneratedArtifactIdentity
         return savedFingerprint.Equals(currentFingerprint, StringComparison.Ordinal) ? "CURRENT" : "STALE";
     }
 
-    private static bool TryReadProjectSpatialReference(string artifactPath, out string projectId,
+    private static bool TryReadProjectSpatialReference(string artifactPath, string? areaId, out string projectId,
         out string fingerprint)
     {
         projectId = "";
@@ -158,7 +158,7 @@ public static class GeneratedArtifactIdentity
                 new MagOps.Core.Domain.WorkspaceRecord());
             if (string.IsNullOrWhiteSpace(workspace.ProjectId)) return false;
             projectId = workspace.ProjectId;
-            fingerprint = ProductionSnapshotService.ProjectSpatialReferenceFingerprint(workspace.CentralMeridian);
+            fingerprint = new WorkspaceService(new MagOps.Infrastructure.Storage.JsonStore()).SpatialFingerprint(directory, workspace, areaId);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -367,7 +367,7 @@ public static class GeneratedArtifactIdentity
             ProductionAlgorithmVersion = string.IsNullOrEmpty(productionRequestFingerprint) ? "" : ProductionAnomalyDetector.Version,
             ProjectSpatialReferenceFingerprint = (context.ContextStatus is "PROJECT" or "WORKAREA") &&
                                                  !string.IsNullOrWhiteSpace(context.ProjectId)
-                ? ProjectSpatialReferenceFingerprintForArtifact(path, context.ProjectId)
+                ? ProjectSpatialReferenceFingerprintForArtifact(path, context.ProjectId, context.WorkareaId)
                 : ""
         };
         if (dependencies is null) File.WriteAllText(path + Suffix, JsonSerializer.Serialize(metadata, Options));
@@ -375,7 +375,7 @@ public static class GeneratedArtifactIdentity
         return metadata;
     }
 
-    private static string ProjectSpatialReferenceFingerprintForArtifact(string path, string projectId)
+    private static string ProjectSpatialReferenceFingerprintForArtifact(string path, string projectId, string? areaId)
     {
         string? directory = Path.GetDirectoryName(Path.GetFullPath(path));
         while (directory is not null && !MagOps.Infrastructure.Storage.ProjectPaths.HasProject(directory))
@@ -385,7 +385,7 @@ public static class GeneratedArtifactIdentity
             MagOps.Infrastructure.Storage.ProjectPaths.ExistingProject(directory),
             new MagOps.Core.Domain.WorkspaceRecord());
         return workspace.ProjectId.Equals(projectId, StringComparison.OrdinalIgnoreCase)
-            ? ProductionSnapshotService.ProjectSpatialReferenceFingerprint(workspace.CentralMeridian)
+            ? new WorkspaceService(new MagOps.Infrastructure.Storage.JsonStore()).SpatialFingerprint(directory, workspace, areaId)
             : "PROJECT_ID_MISMATCH";
     }
 }

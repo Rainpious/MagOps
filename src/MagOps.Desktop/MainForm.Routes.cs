@@ -216,6 +216,7 @@ public sealed partial class MainForm
         {
             RefreshRouteCentralMeridianFromProject();
         }
+        if(_routePlan!=null || _routePartitionContexts.Count>0 || _routeWorkspaceDirty)return;
         TryAutoLoadRoutePly();
         TryAutoLoadRouteKml();
         RefreshRouteKmlDirectorySelector();
@@ -223,67 +224,67 @@ public sealed partial class MainForm
 
     private void TryAutoLoadRoutePly()
     {
-        // Do not replace a valid file that the operator explicitly selected.
-        if (File.Exists(_routeWorkspace.GetPlyPath()))
-            return;
+        string current=_routeWorkspace.GetPlyPath();
+        string? candidate=FindWorkareaBoundary(".ply",current);
+        if(candidate is null && !TryGetManagedOutputContext(out _,out _,out _))
+            candidate=File.Exists(current)?current:_lastGeneratedRoutePlyPath;
+        if(!File.Exists(candidate))return;
+        _routeWorkspace.SetPlyPath(candidate);
+        _lastGeneratedRoutePlyPath=candidate;
+        if (_routeWorkspace.GetSourceChoice()==RouteSourceChoice.None)
+            _routeWorkspace.SetSourceChoice(RouteSourceChoice.Ply);
+    }
 
-        var candidates = new List<(string Path, string Source)>();
-        if (File.Exists(_lastGeneratedRoutePlyPath))
+    // Only the active workarea's boundary collections are searched. Recognised child
+    // ranges and line-only KMLs are never candidates for the whole survey area.
+    private string? FindWorkareaBoundary(string? extension=null,string? preferred=null)
+    {
+        if(!TryGetManagedOutputContext(out _,out string area,out _))return null;
+        var record = _workspace.GetWorkareas(Root).First(x => x.Path.Equals(area, StringComparison.OrdinalIgnoreCase));
+        if (record.Boundary is { } binding)
         {
-            candidates.Add((
-                Path.GetFullPath(_lastGeneratedRoutePlyPath),
-                "上一步生成的"));
+            if (extension is not null && !extension.Equals(Path.GetExtension(binding.RelativePath), StringComparison.OrdinalIgnoreCase))
+                return null;
+            return WorkspaceService.ResolveBoundBoundary(Root, record);
         }
-
-        if (TryGetManagedOutputContext(
-                out _,
-                out string workareaPath,
-                out _))
+        var formats=new[]{(Ext:".kml",Key:"coordinate_kml_range"),(Ext:".ply",Key:"coordinate_oasis_ply")};
+        foreach(var format in formats.OrderByDescending(f=>string.Equals(f.Ext,Path.GetExtension(preferred),StringComparison.OrdinalIgnoreCase)))
         {
-            string directory = ManagedOutputPreview(
-                "coordinate_oasis_ply",
-                workareaPath);
-            if (Directory.Exists(directory))
+            if(extension!=null && extension!=format.Ext)continue;
+            string directory=ManagedOutputPreview(format.Key,area);
+            if(!Directory.Exists(directory))continue;
+            var candidates=Directory.EnumerateFiles(directory,"*"+format.Ext,SearchOption.AllDirectories)
+                .OrderByDescending(p=>string.Equals(Path.GetFullPath(p),preferred,StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(p=>string.Equals(Path.GetFileName(p),Path.GetFileName(preferred),StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(File.GetLastWriteTimeUtc).ThenBy(p=>p,StringComparer.OrdinalIgnoreCase);
+            foreach(string path in candidates)
             {
-                candidates.AddRange(Directory
-                    .EnumerateFiles(directory, "*.ply", SearchOption.TopDirectoryOnly)
-                    .OrderByDescending(File.GetLastWriteTimeUtc)
-                    .Select(path => (Path.GetFullPath(path), "当前工区最近的")));
-            }
-        }
-
-        foreach (var candidate in candidates
-                     .Where(x => File.Exists(x.Path))
-                     .DistinctBy(x => x.Path, StringComparer.OrdinalIgnoreCase))
-        {
-            try
-            {
-                IReadOnlyList<SurveyBoundaryPoint> boundary =
-                    _plySurveyLines.ReadBoundary(candidate.Path);
-                _routeWorkspace.SetPlyPath(candidate.Path);
-                _lastGeneratedRoutePlyPath = candidate.Path;
-                if (_routeWorkspace.GetSourceChoice() == RouteSourceChoice.None)
+                try
                 {
-                    _routeWorkspace.SetSourceChoice(
-                        RouteSourceChoice.Ply);
+                    if(format.Ext==".kml")
+                    {
+                        if(_kmlSurveySubdivision.TryResolveGeneratedChild(path,out _) || IsKnownPartitionKml(path))continue;
+                        _kmlSurveySubdivision.ReadRegionPolygons(path);
+                    }
+                    else _plySurveyLines.ReadBoundary(path);
+                    return Path.GetFullPath(path);
                 }
-                SetStatus(
-                    $"已自动载入{candidate.Source} PLY：{Path.GetFileName(candidate.Path)}；" +
-                    $"边界点 {boundary.Count} 个。");
-                return;
-            }
-            catch
-            {
-                // Auto-load must never block entering the route page. Skip an
-                // invalid historical PLY and continue to the next candidate.
+                catch(Exception ex) when(ex is IOException or InvalidDataException or FormatException or ArgumentException or System.Xml.XmlException or InvalidOperationException){continue;}
             }
         }
+        return null;
     }
 
     private void ChooseRoutePly(string? selectedPath = null)
     {
         var fileHistory = FileInteractions.For(this, "route-ply", projectLevel: false, global: false);
         string filePath = selectedPath?.Trim() ?? "";
+        if(filePath.Length==0)
+        {
+            string? scoped=FindWorkareaBoundary(".ply");
+            if(!string.Equals(scoped,_routeWorkspace.GetPlyPath(),StringComparison.OrdinalIgnoreCase) ||
+                _routeWorkspace.GetSourceChoice()!=RouteSourceChoice.Ply)filePath=scoped ?? "";
+        }
         if (filePath.Length == 0)
         {
             using var dialog = new OpenFileDialog
@@ -356,7 +357,7 @@ public sealed partial class MainForm
     private void GenerateRoutePlanFromPly()
     {
         GenerateRouteEndpointsFromPlyCore(loadSource: true, showNotice: true);
-        GenerateRoutePlan();
+        GenerateRoutePlanCore(checkTerrain: true);
     }
 
     private string GenerateRouteEndpointsFromPlyCore(
@@ -429,36 +430,16 @@ public sealed partial class MainForm
 
     private bool TryAutoLoadRouteKml(bool force = false)
     {
-        if (!force && File.Exists(_routeWorkspace.GetKmlPath()))
+        string? candidate=FindWorkareaBoundary(".kml",force?null:_routeWorkspace.GetKmlPath());
+        if(candidate is null)return false;
+        if(!force && string.Equals(candidate,_routeWorkspace.GetKmlPath(),StringComparison.OrdinalIgnoreCase))
         {
             RefreshRouteKmlDirectorySelector();
             return true;
         }
-
-        if (!TryGetManagedOutputContext(
-                out _,
-                out string workareaPath,
-                out _))
-        {
-            return false;
-        }
-
-        string directory = ManagedOutputPreview(
-            "coordinate_kml_range",
-            workareaPath);
-        if (!Directory.Exists(directory))
-            return false;
-
-        string? candidate = Directory
-            .EnumerateFiles(directory, "*.kml", SearchOption.AllDirectories)
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
-            return false;
-
         try
         {
-            SpatialGeometry polygon = _kmlSurveySubdivision.ReadPrimaryPolygon(candidate);
+            var polygons = _kmlSurveySubdivision.ReadRegionPolygons(candidate);
             _routeWorkspace.SetKmlPath(Path.GetFullPath(candidate));
             _routeWorkspace.SetSourceChoice(RouteSourceChoice.Kml);
             _routeSubdivisionPreparation = null;
@@ -466,7 +447,7 @@ public sealed partial class MainForm
             RefreshRouteKmlDirectorySelector();
             SetStatus(
                 $"已自动读取当前工区范围 KML：{Path.GetFileName(candidate)}；" +
-                $"Polygon 点数 {polygon.Coordinates.Count}。");
+                $"面数 {polygons.Count}，孔洞 {polygons.Sum(p=>p.InnerRings.Count)}。");
             return true;
         }
         catch
@@ -518,7 +499,7 @@ public sealed partial class MainForm
             {
                 try
                 {
-                    _ = _kmlSurveySubdivision.ReadPrimaryPolygon(path);
+                    _ = _kmlSurveySubdivision.ReadRegionPolygons(path);
                     paths.Add(Path.GetFullPath(path));
                 }
                 catch
@@ -591,6 +572,12 @@ public sealed partial class MainForm
     {
         var fileHistory = FileInteractions.For(this, "route-boundary", projectLevel: false, global: false);
         string filePath = selectedPath?.Trim() ?? "";
+        if(filePath.Length==0)
+        {
+            string? scoped=FindWorkareaBoundary(".kml");
+            if(!string.Equals(scoped,_routeWorkspace.GetKmlPath(),StringComparison.OrdinalIgnoreCase) ||
+                _routeWorkspace.GetSourceChoice()!=RouteSourceChoice.Kml)filePath=scoped ?? "";
+        }
         if (filePath.Length == 0)
         {
             string initial = ResolveRouteKmlInitialDirectory();
@@ -612,7 +599,7 @@ public sealed partial class MainForm
             throw new InvalidDataException("请选择有效的 Polygon KML 范围文件。");
         }
 
-        SpatialGeometry polygon = _kmlSurveySubdivision.ReadPrimaryPolygon(filePath);
+        var polygons = _kmlSurveySubdivision.ReadRegionPolygons(filePath);
         bool preservePartitionWorkspace = IsKnownPartitionKml(filePath);
         if (!preservePartitionWorkspace)
             ClearPartitionRouteWorkspace();
@@ -631,7 +618,7 @@ public sealed partial class MainForm
         RefreshRouteKmlDirectorySelector();
         SetStatus(
             $"已选择 KML 边界：{Path.GetFileName(filePath)}；" +
-            $"Polygon 点数 {polygon.Coordinates.Count}。可直接生成航线，也可先预览/执行分区。");
+            $"面数 {polygons.Count}，孔洞 {polygons.Sum(p=>p.InnerRings.Count)}。可直接生成航线，也可先预览/执行分区。");
         fileHistory.InputSucceeded(filePath);
     }
 
@@ -1467,7 +1454,7 @@ public sealed partial class MainForm
         if (sourceChoice ==
             RouteSourceChoice.Kml)
         {
-            GenerateRoutePlanFromKml();
+            GenerateRoutePlanFromKml(checkTerrain: true);
             return;
         }
 
@@ -1487,7 +1474,7 @@ public sealed partial class MainForm
                 ChooseRouteCsv();
             }
 
-            GenerateRoutePlan();
+            GenerateRoutePlanCore(checkTerrain: true);
             return;
         }
 
@@ -1496,7 +1483,7 @@ public sealed partial class MainForm
     }
 
 
-    private void GenerateRoutePlanFromKml()
+    private void GenerateRoutePlanFromKml(bool checkTerrain = false)
     {
         TryLoadProjectTerrainForRoute();
         string source = _routeWorkspace.GetKmlPath();
@@ -1522,7 +1509,8 @@ public sealed partial class MainForm
         _routeWorkspace.SetSourceChoice(RouteSourceChoice.Kml);
         LoadRouteSourceCore(confirmCentralMeridian: true);
         ApplyPartitionBoundaryStartIfNeeded();
-        GenerateRoutePlan();
+        GenerateRoutePlanCore(checkTerrain);
+        if (_routeWorkspace.TerrainPending) return;
 
         SetStatus(
             $"KML 航线已生成：{Path.GetFileName(source)}。{sourceNote}");
@@ -2176,7 +2164,9 @@ public sealed partial class MainForm
         return File.Exists(current) ? Path.GetFullPath(current) : null;
     }
 
-    private string RequireRouteKmlTerrain()
+    private string RequireRouteKmlTerrain() => RequireTerrainForPlans(_routePlan is null ? [] : [_routePlan]);
+
+    private string RequireTerrainForPlans(IReadOnlyList<RoutePlanResult> plans)
     {
         string? projectTerrain = TryLoadProjectTerrainForRoute();
         string path = projectTerrain ?? _routeWorkspace.GetTerrainDemPath();
@@ -2199,8 +2189,8 @@ public sealed partial class MainForm
         }
 
         var dem = new TerrainSetSampler(path);
-        if (_routePlan is not null &&
-            !RouteTerrainCoversCurrentWorkarea(dem, out string coverageMessage))
+        if (plans.Count > 0 &&
+            !new RouteTerrainCoverage(GetRouteWorkareaLonLat(plans[0]), plans).Covers(dem, out string coverageMessage))
         {
             throw new InvalidOperationException(
                 coverageMessage +
@@ -2228,36 +2218,25 @@ public sealed partial class MainForm
         out string message)
     {
         message = "";
-        if (_routePlan is null)
-            return true;
-
-        IReadOnlyList<(double Lon, double Lat)> points =
-            GetCurrentRouteWorkareaLonLat();
-        if (points.Count == 0)
-            return true;
-
-        var outside = points
-            .Where(point => !dem.CanSampleBilinear(point.Lon, point.Lat))
-            .ToArray();
-        if (outside.Length == 0)
-            return true;
-
-        double minLon = points.Min(x => x.Lon);
-        double maxLon = points.Max(x => x.Lon);
-        double minLat = points.Min(x => x.Lat);
-        double maxLat = points.Max(x => x.Lat);
-        message =
-            $"当前项目地形未完整覆盖工区范围。\r\n\r\n" +
-            $"工区约：{minLon:F6}–{maxLon:F6}°E / {minLat:F6}–{maxLat:F6}°N\r\n" +
-            $"DEM 约：{dem.Info.MinLongitude:F6}–{dem.Info.MaxLongitude:F6}°E / " +
-            $"{dem.Info.MinLatitude:F6}–{dem.Info.MaxLatitude:F6}°N\r\n" +
-            $"范围检查未覆盖点：{outside.Length} / {points.Count}。";
-        return false;
+        return _routePlan is null || new RouteTerrainCoverage(GetCurrentRouteWorkareaLonLat(), [_routePlan]).Covers(dem, out message);
     }
 
-    private IReadOnlyList<(double Lon, double Lat)> GetCurrentRouteWorkareaLonLat()
+    private IReadOnlyList<(double Lon, double Lat)> GetCurrentRouteWorkareaLonLat() => GetRouteWorkareaLonLat(_routePlan);
+
+    private IReadOnlyList<(double Lon, double Lat)> GetRouteWorkareaLonLat(RoutePlanResult? fallback)
     {
-        if (_routePlan is null)
+        string? boundaryPath = FindWorkareaBoundary();
+        if (boundaryPath is not null && Path.GetExtension(boundaryPath).Equals(".kml", StringComparison.OrdinalIgnoreCase))
+            return _kmlSurveySubdivision.ReadRegionPolygons(boundaryPath).SelectMany(p => p.OuterRing)
+                .Select(p => (p.Longitude, p.Latitude)).ToArray();
+        if (boundaryPath is not null && Path.GetExtension(boundaryPath).Equals(".ply", StringComparison.OrdinalIgnoreCase)
+            && _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath).CentralMeridian is double cm)
+            return _plySurveyLines.ReadBoundary(boundaryPath).Select(p =>
+            {
+                var en = RouteCoordinateMath.ResolveProjectedEN(p.X, p.Y);
+                return RouteCoordinateMath.GkToWgs84(en.E, en.N, cm);
+            }).ToArray();
+        if (fallback is null)
             return Array.Empty<(double Lon, double Lat)>();
 
         if (File.Exists(_routeCoveragePlyPath))
@@ -2275,7 +2254,7 @@ public sealed partial class MainForm
                         return RouteCoordinateMath.GkToWgs84(
                             en.E,
                             en.N,
-                            _routePlan.CentralMeridian);
+                            fallback.CentralMeridian);
                     })
                     .ToArray();
             }
@@ -2286,34 +2265,12 @@ public sealed partial class MainForm
             }
         }
 
-        return _routePlan.Inference.Endpoints
+        return fallback.Inference.Endpoints
             .Select(point => RouteCoordinateMath.ToLonLat(
                 point,
-                _routePlan.Mode,
-                _routePlan.CentralMeridian))
+                fallback.Mode,
+                fallback.CentralMeridian))
             .ToArray();
-    }
-
-    private void WarnIfRouteTerrainCoverageIsInsufficient()
-    {
-        if (!_routeWorkspace.GetUseTerrain() || _routePlan is null)
-            return;
-
-        string? terrain = TryLoadProjectTerrainForRoute();
-        if (!File.Exists(terrain))
-            return;
-
-        var dem = new TerrainSetSampler(terrain);
-        if (RouteTerrainCoversCurrentWorkarea(dem, out string message))
-            return;
-
-        MessageBox.Show(
-            this,
-            message +
-            "\r\n\r\n请更换覆盖完整的项目地形；如果本次只需要平面航线，可取消“KML 使用地形高程”。",
-            "地形范围不足",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Warning);
     }
 
     private void RunConcaveBoundaryLineRepairFromPath(string? path) =>
@@ -2538,7 +2495,7 @@ public sealed partial class MainForm
         }
 
         WorkspaceRecord workspace =
-            _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root);
+            _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath);
         if (!workspace.CentralMeridian.HasValue)
         {
             _routeWorkspace.SetCentralMeridianText("");
@@ -2562,7 +2519,7 @@ public sealed partial class MainForm
             ProjectPaths.HasProject(Root))
         {
             workspace =
-                _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root);
+                _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath);
         }
 
         double? reusable = RouteCentralMeridianPolicy.ReuseForRouteLoad(
@@ -2599,7 +2556,7 @@ public sealed partial class MainForm
             if (projectCentralMeridian.HasValue)
             {
                 noteParts.Add(
-                    $"项目信息已记录中央子午线 " +
+                    $"工区信息已记录中央子午线 " +
                     $"{projectCentralMeridian.Value:0.########}°E" +
                     (string.IsNullOrWhiteSpace(
                         workspace?.CentralMeridianSource)
@@ -2621,8 +2578,8 @@ public sealed partial class MainForm
                     inferred.Value) > 1e-9)
             {
                 noteParts.Add(
-                    "项目信息与当前文件自动推断值不同；" +
-                    "默认保留项目信息值，请结合反算位置确认。");
+                    "工区信息与当前文件自动推断值不同；" +
+                    "默认保留工区信息值，请结合反算位置确认。");
             }
 
             var values = PromptDialog.Show(
@@ -2734,18 +2691,18 @@ public sealed partial class MainForm
 
             if (answer == DialogResult.Yes)
             {
-                if (workspace is not null && IsProjectInitialized())
+                if (workspace is not null && IsProjectInitialized() && CurrentWorkareaRelativePath.Length > 0)
                 {
                     if (workspace.CentralMeridian.HasValue &&
                         Math.Abs(workspace.CentralMeridian.Value - cm) > 1e-9)
                     {
                         DialogResult updateProject = MessageBox.Show(
                             this,
-                            $"当前项目空间基准为 {workspace.CentralMeridian.Value:0.########}°E，" +
+                            $"当前工区空间基准为 {workspace.CentralMeridian.Value:0.########}°E，" +
                             $"你刚确认的航线中央子午线为 {cm:0.########}°E。\r\n\r\n" +
-                            "是否将这个已确认航线值提交为新的项目空间基准？\r\n" +
-                            "选择“否”将保留原项目值，并返回中央子午线确认。",
-                            "修改项目空间基准",
+                            "是否将这个已确认航线值提交为新的工区空间基准？\r\n" +
+                            "选择“否”将保留原工区值，并返回中央子午线确认。",
+                            "修改工区空间基准",
                             MessageBoxButtons.YesNo,
                             MessageBoxIcon.Warning);
 
@@ -2759,8 +2716,8 @@ public sealed partial class MainForm
                     }
 
                     workspace =
-                        _workspace.ConfirmProjectCentralMeridian(
-                            Root,
+                        _workspace.ConfirmWorkareaMeridian(
+                            Root, CurrentWorkareaRelativePath,
                             cm,
                             $"ROUTE_CONFIRMED: {Path.GetFileName(sourcePath)}");
                     projectCentralMeridian = workspace.CentralMeridian;
@@ -2784,7 +2741,7 @@ public sealed partial class MainForm
     private void EnsureRoutePlanMatchesProjectSpatialReference(
         double routeCentralMeridian)
     {
-        if (string.IsNullOrWhiteSpace(Root) ||
+        if (string.IsNullOrEmpty(CurrentWorkareaRelativePath) || string.IsNullOrWhiteSpace(Root) ||
             !Directory.Exists(Root) ||
             !ProjectPaths.HasProject(Root))
         {
@@ -2792,12 +2749,12 @@ public sealed partial class MainForm
         }
 
         WorkspaceRecord workspace =
-            _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root);
+            _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath);
         if (!workspace.CentralMeridian.HasValue)
         {
             throw new InvalidOperationException(
-                "项目空间基准尚未确认。请重新载入航线输入，并在反算位置确认窗口中显式确认中央子午线；" +
-                "坐标工具不会替项目填写该参数。");
+                "工区空间基准尚未确认。请重新载入航线输入，并在反算位置确认窗口中显式确认中央子午线；" +
+                "坐标工具不会替工区填写该参数。");
         }
 
         if (Math.Abs(
@@ -2805,9 +2762,9 @@ public sealed partial class MainForm
                 routeCentralMeridian) > 1e-9)
         {
             throw new InvalidOperationException(
-                $"当前航线中央子午线 {routeCentralMeridian:0.########}°E 与项目空间基准 " +
+                $"当前航线中央子午线 {routeCentralMeridian:0.########}°E 与工区空间基准 " +
                 $"{workspace.CentralMeridian.Value:0.########}°E 不一致。" +
-                "请重新载入航线输入并显式确认项目空间基准，禁止使用局部航线参数静默分叉。");
+                "请重新载入航线输入并显式确认工区空间基准，禁止使用局部航线参数静默分叉。");
         }
     }
 
@@ -2953,7 +2910,9 @@ public sealed partial class MainForm
         return Math.Sqrt(ex * ex + ey * ey);
     }
 
-    private void GenerateRoutePlan()
+    private void GenerateRoutePlan() => GenerateRoutePlanCore(checkTerrain: false);
+
+    private void GenerateRoutePlanCore(bool checkTerrain)
     {
         if (!ResolveSiteDraft("重新生成航线")) return;
         bool hasManualEdits =
@@ -3065,7 +3024,7 @@ public sealed partial class MainForm
         string partitionCode = _routeActivePartition?.PartitionCode ?? "";
         var checkSnapshot = _routePlan?.CheckLines.ToList() ?? [];
         var accessSnapshot = _routePlan?.AccessPlanning ?? LoadAccessPlanning();
-        _routePlan = _routePlanningWorkflow.Generate(
+        var candidate = _routePlanningWorkflow.Generate(
             new RoutePlanningRequest(
                 _routeWorkspace.GetCsvPath(),
                 options,
@@ -3073,17 +3032,31 @@ public sealed partial class MainForm
                 partitionCode,
                 _routeActivePartition?.ManifestPath ?? ""));
 
-        _routePlan.DesignBasis = _routeDesignBasis;
-        _routePlan.CheckLines = checkSnapshot;
-        _routePlan.AccessPlanning = accessSnapshot;
+        candidate.DesignBasis = _routeDesignBasis;
+        candidate.CheckLines = checkSnapshot;
+        candidate.AccessPlanning = accessSnapshot;
         EnsureRoutePlanMatchesProjectSpatialReference(
-            _routePlan.CentralMeridian);
+            candidate.CentralMeridian);
         if (_routeActivePartition is { } active && _routePartitionContexts.TryGetValue(active.PartitionCode, out var directionContext) &&
             options.TakeoffAnchorMode == RouteTakeoffAnchorMode.Automatic && options.PartitionStartSide == RoutePartitionStartSide.Automatic &&
             options.FlightDirection == RouteFlightDirection.Automatic)
-            PartitionFlightConsistency.Align(_routePlan, directionContext.MotherFlightDirections);
-        EnsureCurrentRoutePlanBoundarySafe(_routePlan);
+            PartitionFlightConsistency.Align(candidate, directionContext.MotherFlightDirections);
+        EnsureCurrentRoutePlanBoundarySafe(candidate);
 
+        if (checkTerrain && _routeWorkspace.GetUseTerrain() && IsProjectInitialized() && CurrentWorkareaRelativePath.Length > 0)
+        {
+            PrepareRouteTerrain(candidate, () => FinishGeneratedRoutePlan(candidate));
+            return;
+        }
+        FinishGeneratedRoutePlan(candidate);
+    }
+
+    private void FinishGeneratedRoutePlan(RoutePlanResult candidate)
+    {
+        _routePlan = candidate;
+        var options = candidate.Options;
+        string partitionCode = candidate.PartitionCode;
+        double aglM = options.KmzAglM;
         _routeEditedSorties.Clear();
         _routeReversedSorties.Clear();
         _routeBoundaryAdjustedSorties.Clear();
@@ -3123,7 +3096,6 @@ public sealed partial class MainForm
             text += string.Join("\r\n", _routePlan.Warnings);
         _routeWorkspace.SetInfoText(
             text);
-        WarnIfRouteTerrainCoverageIsInsufficient();
 
         if (over.Length > 0)
         {
@@ -3941,7 +3913,7 @@ public sealed partial class MainForm
         string output = RequireRouteOutput();
         string workareaName = CurrentRouteWorkareaName();
         bool kmlIncludeElevation = kml && _routeWorkspace.GetUseTerrain();
-        string? kmlTerrain = kmlIncludeElevation ? RequireRouteKmlTerrain() : null;
+        string? kmlTerrain = kmlIncludeElevation ? RequireTerrainForPlans(plans) : null;
         double kmlAglM = kmlIncludeElevation
             ? ParseRouteNumber(_routeWorkspace.GetAglText(), "目标 AGL")
             : 0.0;
@@ -4211,9 +4183,9 @@ public sealed partial class MainForm
         // Startup cache restoration must never solicit a new spatial-reference
         // decision or promote the cached route value to project authority.
         if (restoringCachedProject && RouteCentralMeridianPolicy.ConfirmedProjectValue(
-                _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root)) is null)
+                _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath)) is null)
         {
-            SetStatus("项目中央子午线尚未确认，已跳过航线工程自动恢复；可手动载入航线工程完成首次确认。");
+            SetStatus("工区中央子午线尚未确认，已跳过航线工程自动恢复；可手动载入航线工程完成首次确认。");
             return;
         }
         if (project.SubdivisionWorkspace is { } subdivision)

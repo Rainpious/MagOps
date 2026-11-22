@@ -59,9 +59,11 @@ public sealed partial class MainForm
         string csvDirectory = ManagedOutputPreview(
             "coordinate_export",
             workareaPath);
-        string? csv = FindLatestCoordinateProjectFile(
+        var area = _workspace.GetWorkareas(Root).First(x => x.WorkareaId == CurrentWorkareaId);
+        string? bound = area.Boundary is null ? null : WorkspaceService.ResolveBoundBoundary(Root, area);
+        string? csv = bound is null ? FindLatestCoordinateProjectFile(
             csvDirectory,
-            "*.csv");
+            "*.csv") : null;
         if (!string.IsNullOrWhiteSpace(csv))
         {
             try
@@ -83,13 +85,20 @@ public sealed partial class MainForm
         string kmlDirectory = ManagedOutputPreview(
             "coordinate_kml_range",
             workareaPath);
-        string? kml = FindLatestCoordinateProjectFile(
-            kmlDirectory,
-            "*.kml");
+        string? kml = bound ?? FindLatestCoordinateProjectFile(kmlDirectory, "*.kml");
         if (!string.IsNullOrWhiteSpace(kml))
         {
             try
             {
+                var regions = _kmlSurveySubdivision.ReadRegionPolygons(kml);
+                if (bound is not null && (regions.Count != 1 || regions[0].InnerRings.Count > 0))
+                {
+                    ResetCoordinateWorkbenchForContextChange();
+                    _coordAutoLoadedContextKey = contextKey;
+                    RefreshGlobalSpatialReference(_workspace.ReadWorkareaSpatialContext(Root, workareaPath));
+                    _coordinateWorkspace.SetProjectSourceSummary($"当前工区边界：{area.Boundary!.SourceName}，{regions.Count} 个面、{regions.Sum(r => r.InnerRings.Count)} 个孔洞。完整边界已供航线使用。");
+                    return;
+                }
                 SpatialGeometry polygon = _kmlSurveySubdivision.ReadPrimaryPolygon(kml);
                 List<GeoCoordinate> points = RemoveClosingCoordinateDuplicate(
                     polygon.Coordinates);
@@ -97,7 +106,15 @@ public sealed partial class MainForm
                     throw new InvalidDataException("项目范围 KML 中的有效边界点不足 3 个。");
 
                 _coordinateWorkspace.ResetForContextChange();
-                _coordinateWorkspace.SelectDatum("WGS84");
+                if (area.Boundary?.Projection is { } projection)
+                {
+                    _coordinateWorkspace.SetProjection(projection.Kind, projection.UtmZone, projection.SouthernHemisphere);
+                    _coordinateWorkspace.SelectDatum(projection.Datum);
+                    _coordinateWorkspace.SetAxisIndex(projection.AxisOrder == XyAxisOrder.NorthingEasting ? 1 : 0);
+                    _coordinateWorkspace.SetFalseEastingText(F(projection.FalseEasting));
+                    _coordinateWorkspace.SetFalseNorthingText(F(projection.FalseNorthing));
+                }
+                else _coordinateWorkspace.SelectDatum("WGS84");
                 _coordinateWorkspace.SetModeIndex(1);
                 _coordinateWorkspace.SetAutoMeridian(true);
                 _coordinateWorkspace.SetInputText(
@@ -106,9 +123,9 @@ public sealed partial class MainForm
                         points.Select(point =>
                             point.Longitude.ToString("0.########", CultureInfo.InvariantCulture) + "," +
                             point.Latitude.ToString("0.########", CultureInfo.InvariantCulture))));
-                ConvertCoordinates();
+                ConvertCoordinateInput(restoring: true);
                 _coordinateWorkspace.SetProjectSourceSummary(
-                    $"项目成果：{Path.GetFileName(kml)}（范围 KML）");
+                    $"工区边界：{area.Boundary?.SourceName ?? Path.GetFileName(kml)}");
                 SetStatus($"已从当前工区范围 KML 恢复 {points.Count} 个边界点：{Path.GetFileName(kml)}");
                 return;
             }
@@ -330,7 +347,8 @@ public sealed partial class MainForm
                     StringComparison.OrdinalIgnoreCase));
         }
 
-        ConvertCoordinates();
+        ConvertCoordinateInput(restoring: true);
+        _coordinateWorkspace.SetAutoMeridian(kind == CoordinateProjectionKind.GaussKruger);
     }
 
     private static bool TryParseNumberWithUnit(string? value, out double result)
@@ -403,7 +421,9 @@ public sealed partial class MainForm
     private static string F(double? value) =>
         value.HasValue ? value.Value.ToString("0.##########", CultureInfo.InvariantCulture) : "";
 
-    private void ConvertCoordinates()
+    private void ConvertCoordinates() => ConvertCoordinateInput(restoring: false);
+
+    private void ConvertCoordinateInput(bool restoring)
     {
         string rawInput = _coordinateWorkspace.GetInputText();
         if (string.IsNullOrWhiteSpace(rawInput))
@@ -430,13 +450,12 @@ public sealed partial class MainForm
 
         double? central = ParseOptionalDouble(_coordinateWorkspace.GetCentralMeridianText(), "中央经线");
         bool gk = _coordinateWorkspace.GetProjectionKind() == CoordinateProjectionKind.GaussKruger;
-        WorkspaceRecord? projectReference = gk && IsProjectInitialized() ? _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root) : null;
-        if (projectReference?.CentralMeridian is { } projectCm)
+        WorkspaceRecord? areaReference = gk && IsProjectInitialized() && CurrentWorkareaRelativePath.Length > 0 ? _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath) : null;
+        if (areaReference?.CentralMeridian is { } projectCm)
         {
-            if (!_coordinateWorkspace.GetAutoMeridian() && central is { } entered && Math.Abs(entered - projectCm) > 1e-9)
-                throw new InvalidDataException("当前坐标中央经线与项目值不同；请通过顶部“中央经线”栏统一修改项目空间基准。");
+            if (!restoring && !_coordinateWorkspace.GetAutoMeridian() && central is { } entered && Math.Abs(entered - projectCm) > 1e-9)
+                throw new InvalidDataException("当前坐标中央经线与工区值不同；请通过顶部“中央经线”栏统一修改工区空间基准。");
             central = projectCm;
-            _coordinateWorkspace.SetAutoMeridian(false);
         }
         double falseEasting = ParseRequiredDouble(_coordinateWorkspace.GetFalseEastingText(), "假东");
         double falseNorthing = ParseRequiredDouble(_coordinateWorkspace.GetFalseNorthingText(), "假北");
@@ -444,7 +463,7 @@ public sealed partial class MainForm
 
         var parameters = _coordinateWorkspace.ReadProjectionParameters(central);
 
-        bool auto = mode != CoordinateInputMode.ProjectedXY && _coordinateWorkspace.GetAutoMeridian();
+        bool auto = areaReference?.CentralMeridian is null && mode != CoordinateInputMode.ProjectedXY && _coordinateWorkspace.GetAutoMeridian();
         int decimalPlaces = CoordinateDecimalPlaces();
         BatchConversionResult converted = CoordinateService.ConvertBatch(
             rawInput,
@@ -454,10 +473,9 @@ public sealed partial class MainForm
             dmsSeparators,
             decimalPlaces);
         string referenceWarning = "";
-        if (projectReference?.CentralMeridian is { } currentCm && mode != CoordinateInputMode.ProjectedXY)
+        if (!restoring && areaReference?.CentralMeridian is { } currentCm && mode != CoordinateInputMode.ProjectedXY)
         {
-            // Geographic input provides independent evidence. Always check it even
-            // when a confirmed project value has disabled the automatic suggestion.
+            // Check the geographic input against the confirmed workarea basis before replacing it.
             var suggestion = CoordinateService.SuggestBatchGk3CentralMeridian(converted.Results);
             if (Math.Abs(suggestion.CentralMeridian - currentCm) > 1e-9)
             {
@@ -466,36 +484,37 @@ public sealed partial class MainForm
                     ? $"\r\n本批坐标跨越多个建议带：{string.Join("、", suggestion.PointMeridians.Select(x => $"{x:g}°"))}，建议值取经度中位数。"
                     : "";
                 DialogResult decision = MessageBox.Show(this,
-                    $"项目中央经线为 {currentCm:g}°，实际经纬度的三度带建议值为 {suggestedCm:g}°，两者不一致。{zones}\r\n\r\n" +
-                    "是：更新项目中央经线并重新计算本批坐标；已有航线和派生成果需重新计算、复核。\r\n" +
-                    "否：保留项目自定义基准，按原值计算并显示差异。\r\n取消：停止本次转换。",
-                    "坐标与项目中央经线不一致", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+                    $"工区中央经线为 {currentCm:g}°，实际经纬度的三度带建议值为 {suggestedCm:g}°，两者不一致。{zones}\r\n\r\n" +
+                    "是：更新工区中央经线并重新计算本批坐标；已有航线和派生成果需重新计算、复核。\r\n" +
+                    "否：保留工区自定义基准，按原值计算并显示差异。\r\n取消：停止本次转换。",
+                    "坐标与工区中央经线不一致", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
                 if (decision == DialogResult.Cancel)
                     return;
                 if (decision == DialogResult.Yes)
                 {
-                    if (!ConfirmContextSwitch("按实际坐标建议更新项目中央经线"))
+                    if (!ConfirmContextSwitch("按实际坐标建议更新工区中央经线"))
                         return;
                     // Finish validation and conversion before changing project state.
                     parameters = parameters with { CentralMeridian = suggestedCm };
                     converted = CoordinateService.ConvertBatch(rawInput, mode, parameters,
                         autoCentralMeridian: false, dmsSeparators, decimalPlaces);
-                    projectReference = ApplyProjectCentralMeridian(suggestedCm,
+                    areaReference = ApplyWorkareaCentralMeridian(suggestedCm,
                         "USER_COORDINATE_REFERENCE_CORRECTED");
                 }
                 else
                 {
-                    referenceWarning = $"  项目采用 {currentCm:g}°，实际坐标三度带建议 {suggestedCm:g}°；本次保留项目基准。";
+                    referenceWarning = $"  工区采用 {currentCm:g}°，实际坐标三度带建议 {suggestedCm:g}°；本次保留工区基准。";
                 }
             }
         }
-        if (projectReference is not null && !projectReference.CentralMeridian.HasValue)
+        if (!restoring && areaReference is not null && !areaReference.CentralMeridian.HasValue)
         {
             double initialCm = converted.CentralMeridian;
-            if (MessageBox.Show(this, $"本次坐标确定中央经线为 {initialCm:0.########}°。确认作为项目空间基准？确认后各界面复用；后续可在顶部修改。",
-                    "首次确认项目中央经线", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            string bands = converted.SuggestedMeridians.Count > 1 ? converted.Warning : "";
+            if (MessageBox.Show(this, $"{bands}本次坐标确定中央经线为 {initialCm:0.########}°。确认作为工区空间基准？确认后各界面复用；后续可在顶部修改。",
+                    "首次确认工区中央经线", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
-            var confirmedReference = _workspace.ConfirmProjectCentralMeridian(Root, initialCm, "USER_COORDINATE_REFERENCE_CONFIRMED");
+            var confirmedReference = _workspace.ConfirmWorkareaMeridian(Root, CurrentWorkareaRelativePath, initialCm, "USER_COORDINATE_REFERENCE_CONFIRMED");
             RefreshGlobalSpatialReference(confirmedReference);
             RefreshProject();
             RefreshArtifactFreshnessStatus();
@@ -709,8 +728,8 @@ public sealed partial class MainForm
                 "输出为无表头纯 XY 两列，每行 X<TAB>Y；不写点号、经纬度、参数说明或其它字段。" +
                 "为保证绘制航线的平面几何和后续坐标换算稳定，PLY 始终使用无带号 XY。" +
                 (managed
-                    ? "当前已选择项目和工区；导出成功后只登记 PLY 成果。本次坐标中央子午线只属于当前坐标批次/文件，绝不会写入或覆盖项目空间基准。"
-                    : "当前未同时选择项目和工区；本次按临时工具使用，手动选择输出位置，不写入项目登记或项目空间基准。"));
+                    ? "当前已选择项目和工区；导出成功后只登记 PLY 成果。本次坐标中央子午线只属于当前坐标批次/文件，绝不会写入或覆盖工区空间基准。"
+                    : "当前未同时选择项目和工区；本次按临时工具使用，手动选择输出位置，不写入项目登记或工区空间基准。"));
 
         if (values is null)
             return;
@@ -744,12 +763,12 @@ public sealed partial class MainForm
             SetStatus(
                 $"Oasis PLY 已导出并登记；本次坐标中央子午线 " +
                 $"{_lastCoordinateBatch.CentralMeridian:0.########}°E 仅写入成果语义，" +
-                "未修改项目空间基准。");
+                "未修改工区空间基准。");
         }
         else
         {
             SetStatus(
-                $"Oasis PLY 已临时导出：{outputPath}（未写入项目登记或项目空间基准）");
+                $"Oasis PLY 已临时导出：{outputPath}（未写入项目登记或工区空间基准）");
         }
 
         TransientNotice.Show(
@@ -1076,6 +1095,8 @@ public sealed partial class MainForm
         RegisterGeneratedBusinessFile(
             outputPath,
             "coordinate_kml_range");
+        if (managed)
+            _workspace.BindWorkareaBoundary(Root, CurrentWorkareaRelativePath, outputPath, projection);
 
         SetStatus(
             managed

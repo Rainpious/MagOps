@@ -27,7 +27,7 @@ public sealed class RoutePlanner
             ? options.CentralMeridian
               ?? RouteCoordinateMath.InferCentralMeridian(raw, sourcePath)
               ?? throw new InvalidOperationException("投影坐标未能自动确定中央经线，请手工填写。")
-            : 0.0;
+            : options.CentralMeridian ?? 0.0;
 
         if (options.MaxSortieKm <= 0)
             throw new ArgumentOutOfRangeException(nameof(options.MaxSortieKm), "最大单架次长度必须大于 0。");

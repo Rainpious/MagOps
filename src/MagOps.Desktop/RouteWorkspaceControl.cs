@@ -17,6 +17,7 @@ internal sealed record RouteWorkspaceActions(
     Action<string> SelectKmlFromDirectory,
     Action<string?> ChooseKml,
     Action LoadProjectKml,
+    Action<string> BindBoundary,
     Action<string?> ChooseCsv,
     Action<string?> RunConcaveRepair,
     Action RefreshSubdivisionPreview,
@@ -277,6 +278,7 @@ internal sealed partial class RouteWorkspaceControl : UserControl
             path => _actions.ChoosePly(path),
             path => FileDropSupport.HasExtension(path, ".ply"));
         plySourceRow.Controls.Add(chooseRoutePly);
+        plySourceRow.Controls.Add(FixedButton("设为工区边界", 116, (_, _) => _actions.BindBoundary(GetPlyPath()), UiButtonRole.Subtle));
         inputLayout.Controls.Add(plySourceRow, 0, 0);
 
         _routeSourceKml.Text = "KML 边界";
@@ -319,10 +321,11 @@ internal sealed partial class RouteWorkspaceControl : UserControl
             path => FileDropSupport.HasExtension(path, ".kml"));
         kmlSourceRow.Controls.Add(chooseRouteKml);
         kmlSourceRow.Controls.Add(FixedButton(
-            "项目默认",
+            "工区边界",
             96,
             (_, _) => _actions.LoadProjectKml(),
             UiButtonRole.Subtle));
+        kmlSourceRow.Controls.Add(FixedButton("设为工区边界", 116, (_, _) => _actions.BindBoundary(GetKmlPath()), UiButtonRole.Subtle));
         inputLayout.Controls.Add(kmlSourceRow, 0, 1);
 
         _routeSourceCsv.Text = "端点 CSV";
@@ -656,7 +659,7 @@ internal sealed partial class RouteWorkspaceControl : UserControl
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
-            ColumnCount = 3,
+            ColumnCount = 4,
             Margin = new Padding(0, 5, 0, 0),
             Padding = Padding.Empty
         };
@@ -666,6 +669,9 @@ internal sealed partial class RouteWorkspaceControl : UserControl
             new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(
             new ColumnStyle(SizeType.AutoSize));
+
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        actionRow.Controls.Add(FixedButton("切割线设计", 108, (_, _) => CheckLinesRequested?.Invoke()), 3, 0);
 
         _routeAdvancedSummary.AutoSize = false;
         _routeAdvancedSummary.AutoEllipsis = true;
@@ -1564,6 +1570,7 @@ internal sealed partial class RouteWorkspaceControl : UserControl
 
     internal void ResetForContextChange()
     {
+        _dismissTerrain?.Invoke();
         _routeCentralMeridian.Clear();
         ClearPathValue(_routePly);
         ClearPathValue(_routeKml);

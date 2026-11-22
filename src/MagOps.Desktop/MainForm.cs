@@ -365,6 +365,7 @@ public sealed partial class MainForm : Form
                     RunUi(
                         "坐标转换",
                         ConvertCoordinates),
+                BindBoundary: () => RunUi("确认工区边界", BindCoordinateBoundary),
                 UseWorkareaRange: () => RunUi("设置当前工区范围", UseCoordinateWorkareaRange),
                 SelectKmlTemplate: path =>
                     RunUi(
@@ -444,6 +445,7 @@ public sealed partial class MainForm : Form
                         "选择 KML 边界",
                         () => ChooseRouteKml(
                             path)),
+                BindBoundary: path => RunUi("确认工区边界", () => BindRouteBoundary(path)),
                 LoadProjectKml: () =>
                     RunUi(
                         "读取项目 KML",
@@ -512,7 +514,7 @@ public sealed partial class MainForm : Form
                 Regenerate: () =>
                     RunUi(
                         "生成航线",
-                        GenerateRoutePlan),
+                        () => GenerateRoutePlanCore(checkTerrain: true)),
                 ChooseOutput: () =>
                     ChooseRouteOutput(),
                 ChooseTerrain: path =>
@@ -779,10 +781,7 @@ public sealed partial class MainForm : Form
                 return;
 
             if (ProjectPaths.HasProject(Root))
-            {
-                RefreshProject();
                 ApplyArtifactFilters();
-            }
         };
         projectBar.Controls.Add(_headerWorkareaSelector);
 
@@ -865,7 +864,7 @@ public sealed partial class MainForm : Form
         _globalCentralMeridian.Text = "中央经线：未确认 · 设置…";
         _globalCentralMeridian.AutoSize = true;
         _globalCentralMeridian.Margin = new Padding(0, 2, 6, 2);
-        _globalCentralMeridian.Click += (_, _) => RunUi("修改项目中央经线", EditProjectCentralMeridian);
+        _globalCentralMeridian.Click += (_, _) => RunUi("修改工区中央经线", EditWorkareaCentralMeridian);
         projectBar.Controls.Add(_globalCentralMeridian);
 
 

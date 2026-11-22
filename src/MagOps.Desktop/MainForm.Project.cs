@@ -529,8 +529,9 @@ public sealed partial class MainForm
     {
         IndependentArtifactTransaction.Recover(Root, _store);
         _artifacts.RefreshFreshnessStatus(Root);
+        EnsureRememberedWorkareaContextLoaded();
         var ws =
-            _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root);
+            _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath);
         var workareas = _workspace.GetWorkareas(Root);
         var tasks = _workspace.GetTasks(Root);
         var artifacts = _artifacts.List(Root);
@@ -553,7 +554,7 @@ public sealed partial class MainForm
         _toolTip.SetToolTip(
             _projectCentralMeridianValue,
             ws.CentralMeridian.HasValue
-                ? $"项目中央子午线：{ws.CentralMeridian.Value:0.########}°E" +
+                ? $"工区中央子午线：{ws.CentralMeridian.Value:0.########}°E" +
                   (string.IsNullOrWhiteSpace(ws.CentralMeridianSource)
                       ? ""
                       : $"\r\n来源：{ws.CentralMeridianSource}") +
@@ -565,8 +566,8 @@ public sealed partial class MainForm
                     ws.CentralMeridianSource.StartsWith(
                         "LEGACY_COORDINATE_DERIVED_INVALIDATED",
                         StringComparison.OrdinalIgnoreCase)
-                    ? "历史 Coordinate/Oasis PLY 派生中央子午线已失效。请通过坐标首次转换、航线反算确认或顶部设置确认项目空间基准。"
-                    : "尚未确认项目中央子午线。首次坐标转换可确认项目值，也可通过航线反算或顶部设置确认；坐标登记和导出不修改项目空间基准。");
+                    ? "历史 Coordinate/Oasis PLY 派生中央子午线已失效。请通过坐标首次转换、航线反算确认或顶部设置确认工区空间基准。"
+                    : "尚未确认工区中央子午线。首次坐标转换可确认工区值，也可通过航线反算或顶部设置确认；坐标登记和导出不修改工区空间基准。");
 
         WorkareaRecord? currentWorkarea = workareas.FirstOrDefault(x =>
             x.Path.Equals(CurrentWorkareaRelativePath, StringComparison.OrdinalIgnoreCase));

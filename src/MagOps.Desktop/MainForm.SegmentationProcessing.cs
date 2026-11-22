@@ -139,7 +139,7 @@ public sealed partial class MainForm
     private string ProcessingContextKey() => string.Join("|", Root, CurrentWorkareaRelativePath,
         (_fieldMagRawAnalysis ?? _fieldMagDataAnalysis)?.Fingerprint ?? "",
         ResolveFieldOperationsRouteSnapshot()?.Fingerprint ?? "",
-        _workspace.GetWorkspace(Root).CentralMeridian);
+        _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath).CentralMeridian);
     private bool ProcessingReviewIsCurrent() => _processingCsvInput is null && _processingReview is not null &&
         !_processingReview.IsDisposed && _processingReviewContext == ProcessingContextKey();
 
@@ -219,7 +219,7 @@ public sealed partial class MainForm
             MessageBox.Show(this, "原保存文件保留，本次重新核验：" + ex.Message, "核验记录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         var projection = ResolveFieldProductionCentralMeridian(
-            _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root), CurrentWorkareaRelativePath);
+            _workspace.ReadWorkareaSpatialContext(Root, CurrentWorkareaRelativePath), CurrentWorkareaRelativePath);
         var review = new AutomaticSegmentationReviewDialog(analysis, route?.SurveyLines ?? [], request,
             route?.Fingerprint ?? "", _projectTimeZone, projection.Value, deferInitialAnalysis: true)
             { EmbeddedWorkspace = true, ReviewOutputDirectory = output, ParameterDefaultsPath = defaults,

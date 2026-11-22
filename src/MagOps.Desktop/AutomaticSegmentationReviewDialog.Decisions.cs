@@ -15,7 +15,7 @@ internal sealed partial class AutomaticSegmentationReviewDialog
         string? taskId = value.TaskIdByOption.TryGetValue(choice, out var id) && !string.IsNullOrWhiteSpace(id) ? id : null;
         var next = new ReviewLegDecision(value.Leg.FlightLegId, row.Cells["Confirmed"].Value is true,
             row.Cells["Include"].Value is true, Convert.ToString(row.Cells["QC"].Value) switch
-            { "通过" => "PASS", "不通过" => "FAIL", _ => "PENDING_QC" }, taskId);
+            { "通过" => "PASS", "不通过" => "FAIL", _ => "PENDING_QC" }, taskId, _reviewDecisions.Get(value.Leg.FlightLegId).ActualRepeat);
         if (!_populatingLegGrid)
         {
             var prior = _reviewDecisions.Get(value.Leg.FlightLegId);

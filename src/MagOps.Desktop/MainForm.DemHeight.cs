@@ -38,7 +38,7 @@ public sealed partial class MainForm
                 if (!ReferenceEquals(_processingReview, review)) return;
                 settings = BindProcessingTerrainSelection(settings);
                 _demHeightOptions = settings; _demHeightSnapshot = null; SaveFieldOperationsSettings();
-            }, RememberLatestGeneratedBusinessFile);
+            }, RememberLatestGeneratedBusinessFile, () => RunUi("下载工区地形", DownloadAw3d30Terrain));
     }
 
     private DemHeightOptions BindProcessingTerrainSelection(DemHeightOptions settings)

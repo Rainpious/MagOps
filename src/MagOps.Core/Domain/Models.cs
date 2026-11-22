@@ -42,8 +42,14 @@ public sealed class GateRecord : ExtensibleRecord
     [JsonPropertyName("confirmed_at")] public string ConfirmedAt { get; set; } = "";
 }
 
+public sealed record WorkareaMeridian(double? Value = null, string Source = "", string ConfirmedAt = "");
+public sealed record WorkareaBoundary(string RelativePath, string Sha256, string SourceName,
+    MagOps.Core.Coordinates.ProjectionParameters? Projection);
+
 public sealed class WorkareaRecord : ExtensibleRecord
 {
+    [JsonPropertyName("spatial_meridian")] public WorkareaMeridian? Meridian { get; set; }
+    [JsonPropertyName("survey_boundary")] public WorkareaBoundary? Boundary { get; set; }
     [JsonPropertyName("previous_display_names")] public List<string> PreviousDisplayNames { get; set; } = [];
     [JsonPropertyName("entity_type")] public string EntityType { get; set; } = "workarea";
     [JsonPropertyName("workarea_id")] public string WorkareaId { get; set; } = "";

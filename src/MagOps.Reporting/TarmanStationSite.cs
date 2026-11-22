@@ -73,7 +73,7 @@ public sealed partial class TarmanReport
             var cross = location.ElementsAfterSelf().FirstOrDefault();
             if (cross?.Name == W + "p" && cross.ElementsAfterSelf().FirstOrDefault() == baseline)
                 PlainEdit(cross.Elements(), "以日变站为中心，进行了10m长的十字剖面磁测，在2m半径范围内磁场变化小于2nT。",
-                    "站址环境及十字剖面磁场稳定性待现场选址记录核实。")?.Invoke();
+                    SiteSentence)?.Invoke();
             ApplyTogether(
                 PlainEdit(fields[0].Control.ElementsBeforeSelf(), "日变站选在磁场平稳地段，且开阔平坦、周围无人文干扰，工作便利，坐标为：经度: ", "日变站经度（°）："),
                 PlainEdit(fields[0].Control.ElementsAfterSelf().TakeWhile(e => e != fields[1].Control), "° 纬度: ", "，纬度（°）："),

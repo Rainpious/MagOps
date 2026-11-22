@@ -11,10 +11,10 @@ internal sealed partial class AutomaticSegmentationReviewDialog
     private TabPage? _demHeightPage;
     private Dictionary<(string Source, int Record, DateTimeOffset Time), DemHeightPoint>? _demHeightLookup;
     internal void ConfigureDemHeight(DemHeightOptions options, DemHeightSnapshot? snapshot, string outputDirectory,
-        Action<DemHeightOptions, DemHeightSnapshot> completed, Action<DemHeightOptions> changed, Action<string> exported)
+        Action<DemHeightOptions, DemHeightSnapshot> completed, Action<DemHeightOptions> changed, Action<string> exported, Action downloadTerrain)
     {
         if (_spatialOnly || _demHeightPage is not null) return;
-        var workspace = new DemHeightWorkspaceControl(_analysis, options, snapshot) { OutputDirectory = outputDirectory };
+        var workspace = new DemHeightWorkspaceControl(_analysis, options, snapshot, downloadTerrain) { OutputDirectory = outputDirectory };
         _demHeightPage = new TabPage("离地高度") { Name = "DemHeightPage" };
         _demHeightPage.Controls.Add(workspace);
         UiTheme.Apply(workspace);

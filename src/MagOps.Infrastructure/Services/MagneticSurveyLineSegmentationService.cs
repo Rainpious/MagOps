@@ -149,6 +149,7 @@ public static class MagneticSurveyLineSegmentationService
         // Oasis groups. These export labels do not create tasks, passes or coverage.
         var passLegIds = audit.Execution.Passes.Select(p => p.FlightLegId).ToHashSet();
         var includedLegIds = audit.ManualIncludedFlightLegIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var actualRepeats = audit.ActualRepeatLegIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         int orderOffset = tasks.Select(t => t.Order).DefaultIfEmpty(0).Max();
         var usedNames = tasks.Select(t => t.LineName).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var unassigned = new Dictionary<(string SourceFile, int SourceRecord), (string LegId, string Name, int Order, int Pass)>();
@@ -189,7 +190,9 @@ public static class MagneticSurveyLineSegmentationService
                 SurveyLineStableId = task?.SurveyLineStableId ?? "",
                 ExecutionSegmentId = task?.ExecutionSegmentId ?? "",
                 ExecutionSegmentStableId = task?.ExecutionSegmentStableId ?? "",
-                IsQualityRepeat = task?.IsQualityRepeat ?? false
+                IsQualityRepeat = task?.IsQualityRepeat == true ||
+                    match.Pass is { } matched && actualRepeats.Contains(matched.FlightLegId) ||
+                    manualUnassigned && actualRepeats.Contains(exportLeg.LegId)
             });
         }
         rows = SplitProductionGaps(rows);

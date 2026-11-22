@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using MagOps.Core.Domain;
 using MagOps.Infrastructure.Services;
 
@@ -186,6 +186,12 @@ internal sealed partial class AutomaticSegmentationReviewDialog
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Length", HeaderText = "长度(m)", Width = 80, ReadOnly = true });
         grid.Columns.Add(new DataGridViewComboBoxColumn { Name = "ManualTask", HeaderText = "指定所属测线", Width = 125, FlatStyle = FlatStyle.Flat, Visible = false });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Evidence", HeaderText = "说明", Width = 260, ReadOnly = true, Visible = false });
+        grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "ActualRepeat", HeaderText = "实际复飞", Width = 76, ToolTipText = "可留空。标记本次实飞航段为重复测量；纳入和质量确认分别操作。" });
+        grid.CurrentCellDirtyStateChanged += (_, _) =>
+        {
+            if (grid.IsCurrentCellDirty && grid.CurrentCell?.OwningColumn?.Name == "ActualRepeat")
+                grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+        };
         RestoreColumnPreferences(grid);
         foreach (DataGridViewColumn column in grid.Columns)
             column.SortMode = column.Name == "ManualTask" ? DataGridViewColumnSortMode.NotSortable : DataGridViewColumnSortMode.Programmatic;
@@ -200,8 +206,16 @@ internal sealed partial class AutomaticSegmentationReviewDialog
         grid.SelectionChanged += (_, _) => SelectLegViewRows(grid);
         grid.CellValueChanged += (_, e) =>
         {
-            if (_refreshingLegViews || e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name != "ManualTask") return;
+            if (_refreshingLegViews || e.RowIndex < 0 || e.ColumnIndex < 0) return;
             if (grid.Rows[e.RowIndex].Tag is not ReviewLegRow value) return;
+            if (grid.Columns[e.ColumnIndex].Name == "ActualRepeat")
+            {
+                var prior = _reviewDecisions.Get(value.Leg.FlightLegId);
+                _reviewDecisions.Set(prior with { ActualRepeat = grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value is true });
+                NotifyWorkspaceStateChanged();
+                return;
+            }
+            if (grid.Columns[e.ColumnIndex].Name != "ManualTask") return;
             DataGridViewRow? master = FindLegDecisionRow(value.Leg.FlightLegId);
             if (master is not null) master.Cells["ManualTask"].Value = grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value;
         };
@@ -297,6 +311,7 @@ internal sealed partial class AutomaticSegmentationReviewDialog
                 DataGridView grid = accepted ? _acceptedLegGrid : _pendingLegGrid;
                 DataGridViewRow row = grid.Rows[grid.Rows.Add()];
                 row.Tag = value;
+                row.Cells["ActualRepeat"].Value = _reviewDecisions.Get(value.Leg.FlightLegId).ActualRepeat;
                 row.Cells["Category"].Value = accepted && value.Pass is null ? "手动纳入·归属待判定" :
                     value.Pass is null && value.Leg.MotionKind == "STATIONARY_VERTICAL" ? "原地升降·需复核" :
                     value.Pass is null && value.Leg.MotionKind == "STATIONARY" ? "停留段·需复核" :

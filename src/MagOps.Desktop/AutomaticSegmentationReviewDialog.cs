@@ -135,7 +135,7 @@ internal sealed partial class AutomaticSegmentationReviewDialog : Form
                 Overrides = [],
                 AnomalyDecisions = [],
                 ManualLegAssignments = [],
-                ManualIncludedFlightLegIds = [], DefaultMatchedSelectionsApplied = false, MotherLineRestoration = null
+                ActualRepeatLegIds = [], ManualIncludedFlightLegIds = [], DefaultMatchedSelectionsApplied = false, MotherLineRestoration = null
             }
             : seedRequest;
         _seedRequest = _seedRequest with { ProjectCentralMeridian = referenceCentralMeridian ?? seedRequest.ProjectCentralMeridian,
@@ -257,7 +257,7 @@ internal sealed partial class AutomaticSegmentationReviewDialog : Form
         _reviewDecisions.Reset();
         _reviewAnalysisSession.Invalidate();
         _seedRequest = _seedRequest with { ConfirmedPassIds = [], QualityConfirmations = [], Overrides = [],
-            ManualLegAssignments = [], ManualIncludedFlightLegIds = [], AnomalyDecisions = [], DefaultMatchedSelectionsApplied = true,
+            ManualLegAssignments = [], ActualRepeatLegIds = [], ManualIncludedFlightLegIds = [], AnomalyDecisions = [], DefaultMatchedSelectionsApplied = true,
             MotherLineRestoration = _seedRequest.MotherLineRestoration is { } restore ? new() { Enabled = restore.Enabled, Options = restore.Options } : null };
         _defaultMatchedSelectionsApplied = true;
         _audit = null;
@@ -888,6 +888,7 @@ internal sealed partial class AutomaticSegmentationReviewDialog : Form
                 ConfirmedPassIds = sameWindows ? previous.ConfirmedPassIds : [],
                 Overrides = sameWindows ? previous.Overrides : [],
                 ManualLegAssignments = sameWindows ? previous.ManualLegAssignments : [],
+                ActualRepeatLegIds = sameWindows ? previous.ActualRepeatLegIds : [],
                 ManualIncludedFlightLegIds = sameWindows ? previous.ManualIncludedFlightLegIds : [],
                 AnomalyDecisions = sameWindows ? previous.AnomalyDecisions : [],
                 DefaultMatchedSelectionsApplied = sameWindows && previous.DefaultMatchedSelectionsApplied,
@@ -1463,6 +1464,7 @@ internal sealed partial class AutomaticSegmentationReviewDialog : Form
                 Overrides = _priorReviewStale ? [] : loaded.Overrides ?? [],
                 AnomalyDecisions = _priorReviewStale ? [] : loaded.AnomalyDecisions ?? [],
                 ManualLegAssignments = _priorReviewStale ? [] : loaded.ManualLegAssignments ?? [],
+                ActualRepeatLegIds = _priorReviewStale ? [] : loaded.ActualRepeatLegIds ?? [],
                 ManualIncludedFlightLegIds = _priorReviewStale ? [] : loaded.ManualIncludedFlightLegIds ?? [],
                 DefaultMatchedSelectionsApplied = !_priorReviewStale && loaded.DefaultMatchedSelectionsApplied,
                 MotherLineRestoration = _priorReviewStale ? null : loaded.MotherLineRestoration,

@@ -2431,8 +2431,8 @@ public sealed partial class MainForm
             IsUsableCentralMeridian(projectWorkspace.CentralMeridian.Value))
         {
             string source = string.IsNullOrWhiteSpace(projectWorkspace.CentralMeridianSource)
-                ? "PROJECT_WORKSPACE"
-                : "PROJECT_WORKSPACE: " + projectWorkspace.CentralMeridianSource;
+                ? "WORKAREA_SPATIAL_REFERENCE"
+                : "WORKAREA_SPATIAL_REFERENCE: " + projectWorkspace.CentralMeridianSource;
             return new FieldProductionCentralMeridian(
                 projectWorkspace.CentralMeridian.Value,
                 source);
@@ -2645,7 +2645,7 @@ public sealed partial class MainForm
         string workarea =
             SelectWorkareaRelativePath("生成 MagOps 原生日变数据");
         WorkspaceRecord projectWorkspace =
-            _workspace.InvalidateLegacyCoordinateDerivedCentralMeridian(Root);
+            _workspace.ReadWorkareaSpatialContext(Root, workarea);
         FieldProductionCentralMeridian projectionCentralMeridian =
             ResolveFieldProductionCentralMeridian(
                 projectWorkspace,

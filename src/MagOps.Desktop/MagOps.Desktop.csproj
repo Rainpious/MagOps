@@ -5,8 +5,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>MagOps.Desktop</RootNamespace>
     <AssemblyName>MagOps</AssemblyName>
-    <Version>0.9.59</Version>
-    <FileVersion>0.9.59</FileVersion>
+    <Version>0.9.60</Version>
+    <FileVersion>0.9.60</FileVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>

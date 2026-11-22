@@ -58,7 +58,8 @@ public sealed partial class TarmanReport
         public string Source(ProfileEntry platform) => platform.Get(Key).Trim() is { Length: > 0 } value ? value : "待补录";
         public TarmanParameter Compare(string source)
         {
-            string previous = (string?)History.Attribute("source") ?? "";
+            source = ReportText(Node.Name.LocalName, source);
+            string previous = ReportText(Node.Name.LocalName, (string?)History.Attribute("source") ?? "");
             bool manual = (History.Attribute("written") is { } written && Current != written.Value) ||
                 (bool?)History.Attribute("keep") == true;
             return new(Key, Label, previous, Current, source, Current != source && (Key == "model" || !manual));
@@ -67,6 +68,7 @@ public sealed partial class TarmanReport
         public void Apply(string source, bool useSource)
         {
             History.SetAttributeValue("source", source);
+            source = ReportText(Node.Name.LocalName, source);
             if (!useSource && Current != source)
             {
                 History.SetAttributeValue("keep", true);
@@ -172,6 +174,12 @@ public sealed partial class TarmanReport
         public void Save(ZipArchive zip, string? platformId = null)
         {
             if (platformId != null) History.SetAttributeValue("platform", platformId);
+            NormalizePresentation();
+            WriteParts(zip);
+        }
+
+        internal void WriteParts(ZipArchive zip)
+        {
             Store(zip, dataPath, data);
             Store(zip, "word/document.xml", document);
         }
@@ -302,9 +310,14 @@ public sealed partial class TarmanReport
         WordWorkfilePackage.Export(path, destination, zip =>
         {
             var parts = new Parts(zip, projectId, areaId);
+            parts.ValidateAssemblyForExport();
             if (parts.StationHistory != null) parts.StationFields();
             if (parts.SiteHistory != null) parts.SiteFields();
             if (parts.ProbeHistory != null)
                 new Parts(zip, projectId, areaId, probe: true).SyncProbeNarrative(validateOnly: true);
+        }, zip =>
+        {
+            var parts = new Parts(zip, projectId, areaId);
+            return parts.NormalizePresentation() ? parts.WriteParts : null;
         });
 }

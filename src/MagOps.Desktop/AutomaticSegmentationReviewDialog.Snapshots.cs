@@ -56,7 +56,7 @@ internal sealed partial class AutomaticSegmentationReviewDialog
         if (snapshot.RecognitionVersion != AuditProductionService.RecognitionVersion(snapshot)) reasons.Add("识别算法版本已变化。");
         if (snapshot.TrackSegmentationFingerprint != TrackSegmentationReferenceService.Fingerprint(snapshot.TrackSegmentation)) reasons.Add("记录中的识别参数指纹不一致。");
         if (snapshot.ProjectCentralMeridian is { } saved && _referenceCentralMeridian is { } current && Math.Abs(saved - current) > 1e-9)
-            reasons.Add("项目中央经线已变化。");
+            reasons.Add("工区中央经线已变化。");
         if (_seedRequest.TrackSegmentation is not null && snapshot.TrackSegmentation is not null &&
             TrackSegmentationReferenceService.Fingerprint(_seedRequest.TrackSegmentation) != TrackSegmentationReferenceService.Fingerprint(snapshot.TrackSegmentation))
             reasons.Add("当前识别参数与记录不同，请按当前输入重新核验。");
@@ -143,6 +143,7 @@ internal sealed class ReviewSnapshotDifferenceDialog : Form
         Row("航线指纹", current.RouteFingerprint, saved.RouteFingerprint);
         Row("中央经线", current.ProjectCentralMeridian, saved.ProjectCentralMeridian);
         Row("飞行窗口与任务", current.MissionWindows, saved.MissionWindows);
+        Row("实际复飞航段", current.ActualRepeatLegIds, saved.ActualRepeatLegIds);
         Row("纳入航段", current.ManualIncludedFlightLegIds, saved.ManualIncludedFlightLegIds);
         Row("确认测线", current.ConfirmedPassIds, saved.ConfirmedPassIds);
         Row("人工归属", current.ManualLegAssignments, saved.ManualLegAssignments);

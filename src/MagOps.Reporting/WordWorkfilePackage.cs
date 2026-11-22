@@ -83,15 +83,26 @@ internal static class WordWorkfilePackage
         finally { File.Delete(tmp); }
     }
 
-    internal static void Export(string path, string destination, Action<ZipArchive> validate)
+    internal static void Export(string path, string destination, Action<ZipArchive> validate, Func<ZipArchive, Action<ZipArchive>?>? prepare = null)
     {
         string tmp = Temporary(destination);
         try
         {
             using var file = ReadSaved(path);
-            using (var zip = new ZipArchive(file, ZipArchiveMode.Read, true)) validate(zip);
+            Action<ZipArchive>? write;
+            using (var zip = new ZipArchive(file, ZipArchiveMode.Read, true))
+            {
+                validate(zip);
+                write = prepare?.Invoke(zip);
+            }
             file.Position = 0;
             using (var dest = File.Create(tmp)) file.CopyTo(dest);
+            if (write != null)
+            {
+                using (var zip = ZipFile.Open(tmp, ZipArchiveMode.Update)) write(zip);
+                using var check = ZipFile.OpenRead(tmp);
+                validate(check);
+            }
             File.Move(tmp, destination);
         }
         finally { File.Delete(tmp); }

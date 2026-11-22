@@ -193,10 +193,10 @@ public sealed class ReportSnapshotBuilder
             ReadAssessment(inputs.AssessmentDirectory, sources, facts, warnings, lines.Keys.Select(x => x.Task).ToHashSet(StringComparer.Ordinal));
         string projectFile = ProjectPaths.ExistingProject(root);
         string projectHash = Hash(projectFile);
-        var project = new WorkspaceService(new JsonStore()).GetWorkspaceReadOnly(root);
+        var project = new WorkspaceService(new JsonStore()).ReadWorkareaSpatialContext(root, workarea);
         if (projectHash != Hash(projectFile)) throw new IOException("读取时项目配置发生变化，请重新检查报告。");
         sources.Add(new("project", projectFile, projectHash));
-        if (project.CentralMeridian is null) warnings.Add("项目中央子午线尚未确认。");
+        if (project.CentralMeridian is null) warnings.Add("工区中央子午线尚未确认。");
         foreach (var source in sources)
             if (!Hash(source.Path).Equals(source.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("检查过程中报告来源发生变化，请重新检查：" + source.Role);

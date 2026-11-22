@@ -190,7 +190,7 @@ public sealed class RouteExportService
         return Path.GetFullPath(path);
     }
 
-    private static IReadOnlyList<(double Lon, double Lat)> BuildDjiRouteKmlPoints(
+    public static IReadOnlyList<(double Lon, double Lat)> BuildDjiRouteKmlPoints(
         RouteSortie sortie,
         string mode,
         double centralMeridian)

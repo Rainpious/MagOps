@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
@@ -9,7 +9,7 @@ using MagOps.Infrastructure.Storage;
 
 namespace MagOps.Infrastructure.Services;
 
-public sealed class WorkspaceService
+public sealed partial class WorkspaceService
 {
     private readonly JsonStore _store;
 
@@ -181,6 +181,7 @@ public sealed class WorkspaceService
             result.Add(new WorkareaRecord
             {
                 WorkareaId = id,
+                Meridian = new(),
                 SubareaId = id,
                 DisplayName = name,
                 Path = Path.GetRelativePath(root, path).Replace('\\', '/'),
@@ -218,6 +219,8 @@ public sealed class WorkspaceService
                 row.Notes = old.Notes;
                 row.UpdatedAt = old.UpdatedAt;
                 row.Extra = old.Extra;
+                row.Meridian = old.Meridian;
+                row.Boundary = old.Boundary;
             }
             seen.Add(row.WorkareaId);
         }
@@ -316,6 +319,7 @@ public sealed class WorkspaceService
         var row = new WorkareaRecord
         {
             WorkareaId = id,
+            Meridian = new(),
             SubareaId = id,
             DisplayName = displayName,
             Path = $"{workareaRoot}/{id}",
@@ -468,6 +472,7 @@ public sealed class WorkspaceService
         var added = new WorkareaRecord
         {
             WorkareaId = id,
+            Meridian = new(),
             SubareaId = id,
             DisplayName = displayName,
             Path = relative,

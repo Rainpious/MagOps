@@ -1,3 +1,4 @@
+using MagOps.Application;
 using System.Globalization;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -20,8 +21,8 @@ public sealed partial class MainForm
                 var a = ring[i]; var b = ring[(i + 1) % ring.Count];
                 double length = new SurveyLineSegment(a, b).Length;
                 if (length <= .001) continue;
-                double bearing = (Math.Atan2(b.X-a.X, b.Y-a.Y)*180/Math.PI+360)%180;
-                edges.Add(($"{label} 边{i+1}", bearing, length));
+                double bearing = (Math.Atan2(b.X - a.X, b.Y - a.Y) * 180 / Math.PI + 360) % 180;
+                edges.Add(($"{label} 边{i + 1}", bearing, length));
             }
         }
         if (_routeWorkspace.GetSourceChoice() == RouteSourceChoice.Ply)
@@ -71,7 +72,7 @@ public sealed partial class MainForm
         else if (_routeWorkspace.GetSourceChoice() == RouteSourceChoice.Ply && File.Exists(_routeWorkspace.GetPlyPath()))
         {
             var ring = _plySurveyLines.ReadBoundary(_routeWorkspace.GetPlyPath());
-            double a = Math.Abs(Enumerable.Range(0, ring.Count).Sum(i => (ring[i].X-ring[0].X)*(ring[(i+1)%ring.Count].Y-ring[0].Y)-(ring[(i+1)%ring.Count].X-ring[0].X)*(ring[i].Y-ring[0].Y))) / 2e6;
+            double a = Math.Abs(Enumerable.Range(0, ring.Count).Sum(i => (ring[i].X - ring[0].X) * (ring[(i + 1) % ring.Count].Y - ring[0].Y) - (ring[(i + 1) % ring.Count].X - ring[0].X) * (ring[i].Y - ring[0].Y))) / 2e6;
             area = $"当前PLY投影面积 {a:0.###} km²（不代表实际完成面积）";
         }
         double[] lengths = plans.SelectMany(p => p.Sorties.SelectMany(s => Enumerable.Range(0, Math.Min(s.SourceLines.Count, s.Points.Count / 2))
@@ -80,96 +81,162 @@ public sealed partial class MainForm
             $"最短测段 {(lengths.Length == 0 ? "未知" : lengths[0].ToString("0.###"))} m；待生成子区 {_routePartitionContexts.Values.Count(c => c.Plan is null)}。\r\n长度来自已生成快照，面积来自当前边界；边界更新后请先重新生成。未含天气、转场和起降往返；短段仅提示，不删除。", "设计工作量");
     }
 
-    private void ManageRouteCheckLines()
+    private string TieDraftPath(TieLineWorkspace context) =>
+        Path.Combine(Root, CurrentWorkareaRelativePath, "切割线草稿", context.Version + ".json");
+
+    private static List<RouteCheckLine> ReadTieDraft(string path) =>
+        JsonSerializer.Deserialize<List<RouteCheckLine>>(File.ReadAllText(path)) ?? throw new InvalidDataException("切割线草稿为空。");
+
+    private string ExportTieFlightKml(TieLineWorkspace context, IReadOnlyList<TieSortie> flights)
     {
-        var plan = _routePlan ?? throw new InvalidOperationException("请先打开一个已生成子区/航线。");
-        RouteIdentityService.EnsureReferences(plan.Sorties);
-        var draft = plan.CheckLines.ToList();
-        using var form = new Form { Text = "检查线设计（复飞 / 交叉分别管理）", Width = 950, Height = 560, StartPosition = FormStartPosition.CenterParent };
-        var list = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true };
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true };
-        var source = new ComboBox { Width = 350, DropDownStyle = ComboBoxStyle.DropDownList };
-        var originals = plan.Sorties.SelectMany(s => Enumerable.Range(0, Math.Min(s.SourceLines.Count, s.Points.Count / 2)).Select(i =>
-            new { Sortie = s, Index = i, Reference = s.TaskReferences.SingleOrDefault(r => r.GeometryFingerprint == RouteIdentityService.Fingerprint(s.Points[i * 2], s.Points[i * 2 + 1]) && (r.LineName == s.SourceLines[i] || r.ExecutionSegmentId == s.SourceLines[i])) }))
-            .Where(x => x.Reference is not null).ToArray();
-        source.Items.AddRange(originals.Select(x => (object)$"{x.Sortie.Name} / {x.Sortie.SourceLines[x.Index]}").ToArray());
-        if (source.Items.Count > 0) source.SelectedIndex = 0;
-        actions.Controls.Add(source);
-        actions.Controls.Add(Button("添加复飞检查", (_, _) => RunUi("复飞检查", () =>
+        var plan = new RoutePlanResult
         {
-            if (source.SelectedIndex < 0) throw new InvalidOperationException("无可关联的原测线身份。");
-            var o = originals[source.SelectedIndex]; var r = o.Reference!;
-            draft.Add(new("check-" + Guid.NewGuid().ToString("N"), RouteCheckLines.Repeat,
-                "复飞_" + o.Sortie.SourceLines[o.Index] + "_" + (draft.Count + 1), r.SurveyTaskStableId, r.SurveyLineStableId,
-                r.GeometryFingerprint, o.Sortie.Points[o.Index * 2].Clone(), o.Sortie.Points[o.Index * 2 + 1].Clone()) { CoordinateMode = plan.Mode, CentralMeridian = plan.CentralMeridian }); Refresh();
-        })));
-        actions.Controls.Add(Button("添加交叉检查", (_, _) => RunUi("交叉检查", () =>
+            Mode = "geographic", SourcePath = context.BoundaryPath, CentralMeridian = context.Meridian,
+            Options = new() { MaxSortieKm = context.MaxSortieM / 1000 },
+            Sorties = flights.Select(context.ToWorkRoute).ToList()
+        };
+        bool elevated = _routeWorkspace.GetUseTerrain();
+        double height = elevated ? ParseRouteNumber(_routeWorkspace.GetAglText(), "目标 AGL") : 0;
+        string? terrain = elevated ? RequireTerrainForPlans([plan]) : null;
+        string folder = Path.Combine(RequireRouteOutput(), $"切割线作业航线_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}");
+        RouteExportBundle bundle;
+        if (IsProjectInitialized())
         {
-            var values = PromptDialog.Show(form, "交叉检查端点（沿用当前航线坐标模式 " + plan.Mode + "）",
-                [new("name", "名称", Required: true), new("x1", "起点 X", Required: true), new("y1", "起点 Y", Required: true),
-                 new("x2", "终点 X", Required: true), new("y2", "终点 Y", Required: true)]);
-            if (values is null) return;
-            double N(string key) { double v = ParseRouteNumber(values[key], key); if (!double.IsFinite(v)) throw new ArgumentException("端点必须为有限数。"); return v; }
-            var line = new RouteCheckLine("check-" + Guid.NewGuid().ToString("N"), RouteCheckLines.Cross, values["name"], "", "", "",
-                new() { X = N("x1"), Y = N("y1") }, new() { X = N("x2"), Y = N("y2") }) { CoordinateMode = plan.Mode, CentralMeridian = plan.CentralMeridian };
-            RouteCheckLines.Validate([line]);
-            if (plan.Mode == "geographic" && new[] { line.Start, line.End }.Any(p => Math.Abs(p.X) > 180 || Math.Abs(p.Y) > 90))
-                throw new ArgumentException("经纬度超出有效范围。");
-            bool Crosses(RouteEndpoint a, RouteEndpoint b, RouteEndpoint c, RouteEndpoint d)
-            {
-                double Side(RouteEndpoint p, RouteEndpoint q, RouteEndpoint r) => (q.X-p.X)*(r.Y-p.Y)-(q.Y-p.Y)*(r.X-p.X);
-                return Side(a,b,c)*Side(a,b,d) < 0 && Side(c,d,a)*Side(c,d,b) < 0;
-            }
-            if (!originals.Any(o => Crosses(line.Start, line.End, o.Sortie.Points[o.Index*2], o.Sortie.Points[o.Index*2+1])))
-                throw new ArgumentException("交叉检查线必须穿过至少一条当前测线；当前端点未形成交叉，请核对坐标模式与位置。");
-            draft.Add(line); Refresh();
-        })));
-        actions.Controls.Add(Button("移除选中", (_, _) => { if (list.SelectedIndex >= 0) draft.RemoveAt(list.SelectedIndex); Refresh(); }));
-        var save = Button("确认到工程", (_, _) => { RouteCheckLines.Validate(draft); form.DialogResult = DialogResult.OK; }); actions.Controls.Add(save);
-        actions.Controls.Add(Button("导出检查线", (_, _) => RunUi("导出检查线", () => ExportRouteCheckLines(plan, draft))));
-        form.Controls.Add(list); form.Controls.Add(actions);
-        form.Controls.Add(new Label { Dock = DockStyle.Top, AutoSize = true,
-            Text = "复飞关联原任务与几何；交叉检查独立身份。此清单不计普通任务进度，不自动纳入生产。确认后需保存航线工程 JSON。" });
-        Refresh();
-        if (form.ShowDialog(this) == DialogResult.OK) { plan.CheckLines = draft; SetRouteWorkspaceDirty(true); }
-        void Refresh()
-        {
-            list.Items.Clear();
-            foreach (var l in draft)
-            {
-                bool linked = l.Kind == RouteCheckLines.Cross || originals.Any(o => o.Reference!.SurveyTaskStableId == l.SourceTaskId && o.Reference.GeometryFingerprint == l.SourceGeometryFingerprint);
-                list.Items.Add($"{l.Kind} | {l.Name} | {l.Id} | {(linked ? "设计快照" : "原任务缺失/几何已变，需复核")}");
-            }
+            var result = ExportRouteWithCustomDestination(plan, new RouteExportRequest(Root, folder,
+                CurrentRouteWorkareaName(), true, false, new GeneratedArtifactContext(_workspace.GetWorkspace(Root).ProjectId,
+                    CurrentWorkareaId), terrain, height, elevated));
+            if (result.RegisteredArtifacts.Count > 0 && _artifactWorkspace.HasGridColumns())
+                ApplyArtifactChanges(result.RegisteredArtifacts);
+            bundle = result.Bundle;
         }
+        else
+            bundle = _routeExporter.ExportAllSeparated(plan, folder, "", exportKml: true, exportCsv: false,
+                exportKmz: false, kmlTerrainGeoTiffPath: terrain, kmlAglM: height, kmlIncludeElevation: elevated);
+
+        string directory = Path.GetDirectoryName(bundle.OutputPaths[0])!;
+        FileInteractions.For(this, "check-flight-kml", "output").OutputSucceeded(directory, directory: true);
+        SetStatus($"已导出 {bundle.OutputPaths.Count} 个切割线架次 KML：{directory}");
+        return directory;
     }
 
-    private void ExportRouteCheckLines(RoutePlanResult plan, IReadOnlyList<RouteCheckLine> lines)
+    private void EditBoundaryTieDraft()
     {
-        RouteCheckLines.Validate(lines);
-        if (lines.Count == 0) throw new InvalidOperationException("没有检查线。");
-        string root = Path.Combine(RequireRouteOutput(), "检查线_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N")[..6]);
-        string staging = root + ".pending";
-        Directory.CreateDirectory(staging);
-        try
+        if (!TryGetManagedOutputContext(out _, out _, out _))
+            throw new InvalidOperationException("请选择工区并登记边界，或载入已有航线工程。");
+        var area = _workspace.GetWorkareas(Root).First(a => a.Path.Equals(CurrentWorkareaRelativePath, StringComparison.OrdinalIgnoreCase));
+        string boundary = FindWorkareaBoundary() ?? throw new InvalidOperationException("请先为当前工区登记边界。");
+        var cm = _workspace.ReadWorkareaSpatialContext(Root, area.Path).CentralMeridian ?? throw new InvalidOperationException("请先确认工区中央经线。");
+        var context = new TieLineWorkspace(boundary, [], area.Boundary?.Projection?.Datum ?? "WGS84",
+            projectMaxM: ParseRoutePositive(_routeWorkspace.GetMaxSortieKmText(), "最大单架次长度") * 1000, boundaryMeridian: cm);
+        string path = TieDraftPath(context);
+        string? initial = File.Exists(path) ? File.ReadAllText(path) : null;
+        var lines = initial == null ? [] : ReadTieDraft(path);
+        double step = lines.FirstOrDefault()?.Design?.Spacing ?? (double.TryParse(_routeWorkspace.GetLineSpacingText(), out double spacing) && spacing > 0 ? spacing : 100);
+        using var editor = new TieLineDesigner(context, lines, step, initial != null, (draft, _) =>
         {
-        string json = Path.Combine(staging, "check-lines.json");
-        File.WriteAllText(json, JsonSerializer.Serialize(new { schemaVersion = 1, mode = plan.Mode, plan.CentralMeridian, plan.PartitionCode, productionEligible = false, lines }, new JsonSerializerOptions { WriteIndented = true }));
-        XNamespace ns = "http://www.opengis.net/kml/2.2";
-        var doc = new XElement(ns + "Document", lines.Select(l =>
+            string folder = Path.Combine(RequireRouteOutput(), "切割线试画_" + Guid.NewGuid().ToString("N"));
+            TieLineExport.Write(folder, context, draft, "待载入正式测线");
+            SetStatus("切割线草稿已导出：" + folder);
+            return folder;
+        }, flights => ExportTieFlightKml(context, flights));
+        if (editor.ShowDialog(this) != DialogResult.OK || !editor.Changed) return;
+        using var guard = MagOps.Infrastructure.Storage.WorkspaceFileLock.AcquireForRoot(Root);
+        if ((File.Exists(path) ? File.ReadAllText(path) : null) != initial)
+            throw new IOException("其他窗口已保存新的草稿，请重开后再修改。");
+        AtomicFileWriter.Write(path, stream => JsonSerializer.Serialize(stream, editor.Lines));
+        SetStatus("工区切割线草稿已保存，交会待载入正式测线。");
+    }
+
+    private void ManageRouteCheckLines()
+    {
+        var plan = _routePlan ?? _routePartitionContexts.Values.Select(c => c.Plan).FirstOrDefault(p => p != null);
+        if (plan is null)
         {
-            var a = RouteCoordinateMath.ToLonLat(l.Start, l.CoordinateMode, l.CentralMeridian); var b = RouteCoordinateMath.ToLonLat(l.End, l.CoordinateMode, l.CentralMeridian);
-            return new XElement(ns + "Placemark", new XAttribute("id", l.Id), new XElement(ns + "name", l.Kind + " / " + l.Name),
-                new XElement(ns + "description", $"检查设计；原任务={l.SourceTaskId}；几何快照={l.SourceGeometryFingerprint}；需复核"),
-                new XElement(ns + "LineString", new XElement(ns + "coordinates", FormattableString.Invariant($"{a.Lon:R},{a.Lat:R},0 {b.Lon:R},{b.Lat:R},0"))));
-        }));
-        string kml = Path.Combine(staging, "check-lines.kml"); new XDocument(new XElement(ns + "kml", doc)).Save(kml);
-        foreach (string path in new[] { json, kml })
-            GeneratedArtifactIdentity.Write(path, "design", "check_line_design", GeneratedArtifactIdentity.Hash(json), File.Exists(plan.SourcePath) ? [plan.SourcePath] : [], qualityStatus: "REQUIRES_REVIEW",
-                context: IsProjectInitialized() ? new GeneratedArtifactContext(_workspace.GetWorkspace(Root).ProjectId, CurrentWorkareaId) : null);
-        Directory.Move(staging, root);
+            EditBoundaryTieDraft();
+            return;
         }
-        finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
-        RegisterGeneratedBusinessFiles([Path.Combine(root, "check-lines.json"), Path.Combine(root, "check-lines.kml")], "check_line_design");
-        FileInteractions.For(this, "check-lines", "output").OutputSucceeded(root, directory: true);
+        var plans = _routePartitionContexts.Values.Where(c => c.Plan != null).Select(c => c.Plan!).Append(plan).Distinct().ToArray();
+        var prior = plan.CheckLines.Select(l => l.Design).FirstOrDefault(d => d is not null);
+        string? preferred = _routeSubdivisionPreparation?.SourceKml ?? _restoredSubdivisionSnapshot?.MotherKmlPath ?? prior?.BoundaryPath;
+        string? boundary = FindWorkareaBoundary(preferred: preferred);
+        if (!TryGetManagedOutputContext(out _, out _, out _))
+        {
+            boundary ??= new[] { preferred, _routeWorkspace.GetKmlPath(), _routeWorkspace.GetPlyPath(), _routeCoveragePlyPath }
+                .FirstOrDefault(p => File.Exists(p) && !IsKnownPartitionKml(p!));
+        }
+        if (boundary is null)
+        {
+            using var pick = new OpenFileDialog { Title = "选择整个工区的边界", Filter = "工区边界|*.ply;*.kml", InitialDirectory = ResolveRouteKmlInitialDirectory() };
+            if (pick.ShowDialog(this) != DialogResult.OK) return;
+            boundary = pick.FileName;
+        }
+        double activeLimit = plan.Options.MaxSortieKm;
+        if (_routeWorkspace.HasEditedFlightLimit)
+            activeLimit = ParseRoutePositive(_routeWorkspace.GetMaxSortieKmText(), "最大单架次长度");
+        bool limitChanged = activeLimit != plan.Options.MaxSortieKm;
+        double networkLimit = plans.Min(p => ReferenceEquals(p, plan) ? activeLimit : p.Options.MaxSortieKm) * 1000;
+        var areaDatum = TryGetManagedOutputContext(out _, out string currentArea, out _)
+            ? _workspace.GetWorkareas(Root).First(a => a.Path.Equals(currentArea, StringComparison.OrdinalIgnoreCase)).Boundary?.Projection?.Datum : null;
+        var context = new TieLineWorkspace(boundary, plans, _routeSubdivisionPreparation?.Datum ?? prior?.Datum ?? _routeActivePartition?.Datum ?? areaDatum ?? "WGS84", _routePartitionContexts.Values.Count(c => c.Plan is null), networkLimit);
+        var catalog = plans.SelectMany(p => p.CheckLines).DistinctBy(l => l.Id).ToList();
+        bool imported = false;
+        if (catalog.All(l => l.Design == null) && TryGetManagedOutputContext(out _, out _, out _))
+        {
+            var source = new TieLineWorkspace(boundary, [], context.Datum, projectMaxM: networkLimit, boundaryMeridian: context.Meridian);
+            string draftPath = TieDraftPath(source);
+            if (File.Exists(draftPath) && MessageBox.Show(this, "按当前正式测线复核并带入已保存的工区切割线草稿？", "工区切割线", MessageBoxButtons.YesNo) == DialogResult.Yes)
+            {
+                foreach (var old in ReadTieDraft(draftPath))
+                {
+                    var design = old.Design!;
+                    var a = design.Approach.End; var b = design.Departure.Start;
+                    var line = context.Draw(old.Name, a, Math.Atan2(b.X-a.X,b.Y-a.Y)*180/Math.PI, design.Spacing, design.Approach.Length, design.Departure.Length, old.Id);
+                    catalog.Add(line with { Design = line.Design! with { Layout = design.Layout, CutFractions = design.CutFractions,
+                        DesignNote = design.DesignNote, Standard = design.Standard, FlightBudget = design.FlightBudget } });
+                }
+                imported = catalog.Count > 0;
+            }
+        }
+        double step = double.TryParse(_routeWorkspace.GetLineSpacingText(), out var spacing) && spacing > 0 ? spacing : 100;
+        using var editor = new TieLineDesigner(context, catalog, prior?.Spacing ?? step, !_routeWorkspaceDirty && !limitChanged && !imported, (lines, state) =>
+        {
+            if (lines.Count == 0) throw new InvalidOperationException("没有检查线。");
+            string root = Path.Combine(RequireRouteOutput(), "检查线_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N")[..6]);
+            string staging = root + ".pending";
+            try
+            {
+                TieLineExport.Write(staging, context, lines, state);
+                string json = Path.Combine(staging, "check-lines.json");
+                foreach (var name in TieLineExport.Files)
+                    GeneratedArtifactIdentity.Write(Path.Combine(staging, name), "design", "check_line_design", GeneratedArtifactIdentity.Hash(json),
+                        new[] { boundary, plan.SourcePath }.Where(File.Exists).ToArray(), qualityStatus: "REQUIRES_REVIEW",
+                        context: IsProjectInitialized() ? new GeneratedArtifactContext(_workspace.GetWorkspace(Root).ProjectId, CurrentWorkareaId) : null);
+                Directory.Move(staging, root);
+            }
+            finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+            RegisterGeneratedBusinessFiles(TieLineExport.Files.Select(n => Path.Combine(root, n)).ToArray(), "check_line_design");
+            FileInteractions.For(this, "check-lines", "output").OutputSucceeded(root, directory: true);
+            SetStatus("已导出切割线设计：" + root);
+            return root;
+        }, flights => ExportTieFlightKml(context, flights));
+        if (editor.ShowDialog(this) != DialogResult.OK || (!editor.Changed && !limitChanged && !imported)) return;
+        if (limitChanged)
+        {
+            plan.Options.MaxSortieKm = activeLimit;
+            if (_routePartitionContexts.TryGetValue(plan.PartitionCode, out var current) && ReferenceEquals(current.Plan, plan))
+            {
+                current.MaxSortieKm = activeLimit;
+                current.Dirty = true;
+                _routeWorkspace.UpdatePartitionOverviewEntry(current.ToOverviewEntry());
+            }
+            _routeWorkspace.AcceptFlightLimit();
+        }
+        foreach (var part in plans)
+        {
+            var localIds = part.CheckLines.Select(l => l.Id).ToHashSet();
+            part.CheckLines = editor.Lines.Where(l => l.Design != null || localIds.Contains(l.Id)).ToList();
+        }
+        SetRouteWorkspaceDirty(true);
+        SetStatus("切割线已确认到工程，请保存航线工程 JSON。");
     }
 }

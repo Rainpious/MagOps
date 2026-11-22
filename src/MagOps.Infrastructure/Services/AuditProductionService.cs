@@ -1,4 +1,4 @@
-﻿using MagOps.Core.Domain;
+using MagOps.Core.Domain;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -16,6 +16,16 @@ public sealed record AuditProductionRequest(
 {
     /// <summary>Design-task snapshot used when the review decisions were made.</summary>
     public string RouteFingerprint { get; init; } = "";
+    // Omit empty selections so older request fingerprints stay valid.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<string> ActualRepeatLegIds { get; init; } = [];
+    [System.Text.Json.Serialization.JsonPropertyName("ActualRepeatLegIds")]
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? SavedActualRepeats
+    {
+        get => ActualRepeatLegIds.Count == 0 ? null : ActualRepeatLegIds;
+        init => ActualRepeatLegIds = value ?? [];
+    }
     /// <summary>Passes explicitly checked by a person in the execution review UI.</summary>
     public IReadOnlyList<string> ConfirmedPassIds { get; init; } = [];
     /// <summary>When true, only checked passes may contribute to production selection.</summary>
@@ -66,6 +76,7 @@ public sealed record AuditProductionResult(string Status, bool IsReviewDraft,
     public IReadOnlyList<TaskTrackCoverage> SelectedCoverage { get; init; } = [];
     public IReadOnlyList<TaskTrackCoverage> ProductionCsvCoverage { get; init; } = [];
     /// <summary>Validated explicit per-leg inclusions; distinct from blanket point-level draft export.</summary>
+    public IReadOnlyList<string> ActualRepeatLegIds { get; init; } = [];
     public IReadOnlyList<string> ManualIncludedFlightLegIds { get; init; } = [];
 }
 
@@ -133,7 +144,7 @@ public sealed class AuditProductionService
         Stage("screening", reuseScreening);
         var activeSamples = screening?.IncludedSamples ?? analysis.UavSamples;
         bool screeningMatches = screening is null || request?.ScreeningFingerprint == screening.Fingerprint;
-        bool hasDecisions = request is not null && (request.QualityConfirmations.Count > 0 ||
+        bool hasDecisions = request is not null && (request.ActualRepeatLegIds.Count > 0 || request.QualityConfirmations.Count > 0 ||
             request.ConfirmedPassIds.Count > 0 || request.ManualLegAssignments.Count > 0 ||
             request.ManualIncludedFlightLegIds.Count > 0 || request.Overrides.Count > 0 || request.AnomalyDecisions.Count > 0);
         bool algorithmMatches = !hasDecisions || request?.RecognitionVersion == RecognitionVersion(request);
@@ -270,10 +281,12 @@ public sealed class AuditProductionService
             p.PassId.Equals(id, StringComparison.OrdinalIgnoreCase))).ToArray();
         if (unknownConfirmedIds.Length > 0)
             blocked.Add($"STALE_REVIEW_DECISIONS: {unknownConfirmedIds.Length} 条测线核验记录不属于本次执行结果，已忽略。");
+        var actualRepeats = (decisionsMatch ? request?.ActualRepeatLegIds ?? [] : []).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var passes = execution.Passes.Select(p =>
         {
             SurveyLinePass reviewed = p with
             {
+                IsQualityRepeat = p.IsQualityRepeat || actualRepeats.Contains(p.FlightLegId),
                 ReviewConfirmed = request?.RequirePassConfirmation != true || confirmedIds.Contains(p.PassId)
             };
             return byId.TryGetValue(p.PassId, out var c)
@@ -296,14 +309,25 @@ public sealed class AuditProductionService
         foreach (var task in validTasks)
         {
             string id = task.SurveyTaskStableId;
-            var selection = SurveyProductionSelection.Select(id, selectablePasses, validOverrides, task.IsQualityRepeat);
+            var taskOverrides = validOverrides.Where(o => o.SurveyTaskStableId == id).ToArray();
+            var switchedRoles = selectablePasses.Where(p => actualRepeats.Contains(p.FlightLegId) &&
+                p.SurveyTaskStableId == id && p.IsQualityRepeat != task.IsQualityRepeat).Select(p => p.PassId).ToHashSet();
+            if (taskOverrides.Any(o => switchedRoles.Contains(o.PassId)))
+                blocked.Add($"MANUAL_SELECTION_ROLE_CHANGED: {task.LineName} 的人工区间已标作实际复飞，本次常规生产跳过该区间选择。");
+            var selection = SurveyProductionSelection.Select(id, selectablePasses,
+                taskOverrides.Where(o => !switchedRoles.Contains(o.PassId)), task.IsQualityRepeat);
             selections.Add(selection);
             var completion = SurveyCoverage.Calculate(id, task.LengthM,
-                selectablePasses.Where(p => p.SurveyTaskStableId == id && p.QualityStatus == "PASS")
+                selectablePasses.Where(p => p.SurveyTaskStableId == id && p.IsQualityRepeat == task.IsQualityRepeat && p.QualityStatus == "PASS")
                     .SelectMany(p => p.Coverage));
             if (selection.Status != "READY" || completion.Status != "COMPLETE")
                 blocked.Add($"PRODUCTION_SELECTION_REVIEW: {task.LineName} 存在未选择区间或覆盖缺口。");
         }
+        // Keep each confirmed repeat available to the repeat product, independently of ordinary line coverage.
+        var ordinaryIds = validTasks.Where(t => !t.IsQualityRepeat).Select(t => t.SurveyTaskStableId).ToHashSet();
+        foreach (var repeat in selectablePasses.Where(p => actualRepeats.Contains(p.FlightLegId) &&
+                     p.QualityStatus == "PASS" && ordinaryIds.Contains(p.SurveyTaskStableId)))
+            selections.Add(SurveyProductionSelection.Select(repeat.SurveyTaskStableId, [repeat], qualityRepeat: true));
         var selected = new List<ExecutionSampleReference>();
         foreach (var selection in selections)
         foreach (var entry in selection.Entries)
@@ -417,6 +441,7 @@ public sealed class AuditProductionService
             ProductionAnomalyOptions = anomalyOptions,
             ProductionSnapshotFingerprint = ProductionSnapshotService.Fingerprint(analysis.Fingerprint, routeFingerprint, request, selected),
             ProductionRequestFingerprint = ProductionSnapshotService.RequestFingerprint(request),
+            ActualRepeatLegIds = actualRepeats.Where(legsById.ContainsKey).ToArray(),
             ManualIncludedFlightLegIds = includedLegIds.Where(legsById.ContainsKey).ToArray() };
         Stage("snapshot");
         return result;

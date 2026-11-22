@@ -48,7 +48,8 @@ public sealed class ReviewDecisionState
             request.ManualIncludedFlightLegIds.Contains(legId, StringComparer.OrdinalIgnoreCase),
             quality?.QualityStatus ?? PassQualityMarkers.Pending,
             assignment is not null ? allowedTaskIds.FirstOrDefault(id =>
-                id.Equals(assignment.SurveyTaskStableId, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(id)) : null));
+                id.Equals(assignment.SurveyTaskStableId, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(id)) : null,
+            request.ActualRepeatLegIds.Contains(legId, StringComparer.OrdinalIgnoreCase)));
     }
 
     public AuditProductionRequest ApplyTo(AuditProductionRequest seed, string reviewer)
@@ -56,6 +57,7 @@ public sealed class ReviewDecisionState
         var confirmed = _legs.Values.Where(d => d.Confirmed).Select(d => d.LegId + "/pass").ToArray();
         return seed with
         {
+            ActualRepeatLegIds = _legs.Values.Where(d => d.ActualRepeat).Select(d => d.LegId).ToArray(),
             ConfirmedPassIds = confirmed,
             ManualIncludedFlightLegIds = _legs.Values.Where(d => d.Included).Select(d => d.LegId).ToArray(),
             ManualLegAssignments = _legs.Values.Where(d => !string.IsNullOrWhiteSpace(d.TaskId)).Select(d =>
@@ -71,7 +73,7 @@ public sealed class ReviewDecisionState
 }
 
 public sealed record ReviewLegDecision(string LegId, bool Confirmed = false, bool Included = false,
-    string QualityStatus = PassQualityMarkers.Pending, string? TaskId = null)
+    string QualityStatus = PassQualityMarkers.Pending, string? TaskId = null, bool ActualRepeat = false)
 {
     // Explicit preprocessing inclusion and legacy confirmed/QC-approved selection
     // remain independent routes; including a leg does not approve its quality.

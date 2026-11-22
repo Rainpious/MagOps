@@ -1,4 +1,6 @@
-﻿using MagOps.Infrastructure.Services;
+﻿using MagOps.Core.Coordinates;
+using MagOps.Core.Routes;
+using MagOps.Infrastructure.Services;
 namespace MagOps.Desktop;
 public sealed partial class MainForm
 {
@@ -10,6 +12,62 @@ public sealed partial class MainForm
             : new Aw3d30DownloadDialog();
         dialog.ShowDialog(this);
     }
+    private void PrepareRouteTerrain(RoutePlanResult candidate, Action finish)
+    {
+        string root = Root, area = CurrentWorkareaRelativePath;
+        long revision = _projectWorkareaContext.Current.Revision;
+        var boundary = FindWorkareaBoundary();
+        var coverage = new RouteTerrainCoverage(GetRouteWorkareaLonLat(candidate), [candidate], TieTerrainSamples(candidate));
+        var library = new TerrainLibraryService();
+        string current = _routeWorkspace.GetTerrainDemPath();
+        if (File.Exists(current) && BusyOperationDialog.Run(this, "检查工区地形", "沿飞行路径核对高程…",
+            () => coverage.CoversFile(current)))
+        {
+            finish();
+            return;
+        }
+
+        EnsureDefaultTerrainLibrary();
+        void Apply(TerrainSelection selection)
+        {
+            if (revision != _projectWorkareaContext.Current.Revision || TerrainContextKey() != Path.GetFullPath(root) + "|" + area)
+                throw new OperationCanceledException("工区已切换，请在当前工区重新生成。");
+            if (!string.Equals(boundary, FindWorkareaBoundary(), StringComparison.OrdinalIgnoreCase))
+                throw new OperationCanceledException("工区边界已更新，请按新边界重新生成。");
+            EnsureRoutePlanMatchesProjectSpatialReference(candidate.CentralMeridian);
+            string manifest = new WorkareaTerrainService().Bind(root, area, selection);
+            _routeWorkspace.SetTerrainDemPath(manifest);
+            _routeTerrainLoadedProjectRoot = TerrainContextKey();
+            finish();
+        }
+        var local = BusyOperationDialog.Run(this, "匹配本地地形", "检查公共库中的瓦片与沿线采样点…", () => coverage.FindLocal(library));
+        if (local is not null) Apply(local);
+        else
+        {
+            SetStatus("请选择地形模型，补齐后将继续生成当前航线。");
+            _routeWorkspace.RequestRouteTerrain(coverage, area, Apply);
+        }
+    }
+
+    private IEnumerable<(double Lon, double Lat)> TieTerrainSamples(RoutePlanResult plan)
+    {
+        var designs = plan.CheckLines.Where(l => l.Design is not null).ToArray();
+        if (designs.Length == 0) yield break;
+        var prior = designs[0].Design!;
+        string? boundary = FindWorkareaBoundary(preferred: prior.BoundaryPath);
+        if (boundary is null) yield break;
+        var plans = _routePartitionContexts.Values.Where(c => c.Plan is not null && c.PartitionCode != plan.PartitionCode)
+            .Select(c => c.Plan!).Append(plan).ToArray();
+        var context = new TieLineWorkspace(boundary, plans, prior.Datum);
+        var lines = plans.SelectMany(p => p.CheckLines).DistinctBy(l => l.Id);
+        foreach (var flight in TieFlightPlanner.Build(lines, context.Version, context.MaxSortieM, context.Bearing))
+        {
+            var sortie = context.ToWorkRoute(flight);
+            foreach (var point in RouteExportService.BuildDjiRouteKmlPoints(sortie, "geographic", context.Meridian))
+                yield return point;
+        }
+    }
+
     private void EnsureDefaultTerrainLibrary()
     {
         if(string.IsNullOrWhiteSpace(new TerrainLibraryService().Settings().DefaultDirectory))ConfigureDefaultTerrainLibrary();

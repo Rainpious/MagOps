@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using MagOps.Core.Domain;
 
 namespace MagOps.Infrastructure.Services;
@@ -54,7 +54,7 @@ public static class SegmentationReviewStore
     {
         var saved = JsonSerializer.Deserialize<AuditProductionRequest>(File.ReadAllText(path), Json)
             ?? throw new InvalidDataException("核验状态文件为空：" + path);
-        if (saved.MissionWindows is null || saved.QualityConfirmations is null || saved.Overrides is null ||
+        if (saved.ActualRepeatLegIds is null || saved.MissionWindows is null || saved.QualityConfirmations is null || saved.Overrides is null ||
             saved.ConfirmedPassIds is null || saved.ManualIncludedFlightLegIds is null || saved.ManualLegAssignments is null ||
             saved.AnomalyDecisions is null || saved.ProductionAnomalyOptions is null)
             throw new InvalidDataException("核验状态缺少必要集合：" + path);

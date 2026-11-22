@@ -4,6 +4,7 @@ namespace MagOps.Core.Routes;
 public sealed record RouteCheckLine(string Id, string Kind, string Name, string SourceTaskId,
     string SourceLineId, string SourceGeometryFingerprint, RouteEndpoint Start, RouteEndpoint End)
 {
+    public TieLineDesign? Design { get; init; }
     public string CoordinateMode { get; init; } = "";
     public double CentralMeridian { get; init; }
 }
@@ -20,7 +21,9 @@ public static class RouteCheckLines
         if (lines is null || lines.Any(l => l is null)) throw new ArgumentException("检查线清单不能为 null。");
         if (lines.Select(l => l.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != lines.Count)
             throw new ArgumentException("检查线身份重复。");
+        var alignments = new List<TieLineDesign>();
         foreach (var line in lines)
+        {
             if (string.IsNullOrWhiteSpace(line.Id) || string.IsNullOrWhiteSpace(line.Name) ||
                 line.Kind is not (Repeat or Cross) || line.CoordinateMode is not ("projected" or "geographic") ||
                 !double.IsFinite(line.CentralMeridian) || Math.Abs(line.CentralMeridian) > 180 || line.Start is null || line.End is null ||
@@ -30,5 +33,24 @@ public static class RouteCheckLines
                 line.Kind == Repeat && (string.IsNullOrWhiteSpace(line.SourceTaskId) || string.IsNullOrWhiteSpace(line.SourceLineId) || string.IsNullOrWhiteSpace(line.SourceGeometryFingerprint)) ||
                 line.Kind == Cross && (!string.IsNullOrEmpty(line.SourceTaskId) || !string.IsNullOrEmpty(line.SourceLineId)))
                 throw new ArgumentException("检查线类型、关联身份或端点无效。");
+            if (line.Design is {} d && (line.Kind != Cross || string.IsNullOrWhiteSpace(d.Version)
+                || !double.IsFinite(d.Spacing) || d.Spacing <= 0 || d.Meridian != line.CentralMeridian
+                || d.Approach is null || d.Departure is null || d.Inside is not {Length: > 0} || d.Crossings is null
+                || d.Inside.Append(d.Approach).Append(d.Departure).Any(s => s?.Start is null || s.End is null || !double.IsFinite(s.Length))
+                || d.Inside.Any(s=>s.Length <= 0) || d.Crossings.Any(h=>h?.Point is null || !double.IsFinite(h.Point.X) || !double.IsFinite(h.Point.Y) || string.IsNullOrWhiteSpace(h.LineId))
+                || d.Approach.End != d.Inside[0].Start || d.Departure.Start != d.Inside[^1].End))
+                throw new ArgumentException("切割线的区内段、外延或交点数据不完整。");
+            if (line.Design is {} design)
+            {
+                if (design.CutFractions is null || design.FlightBudget is null ||
+                    design.CutFractions.Any(f=>!double.IsFinite(f)||f<=0||f>=1) ||
+                    !design.CutFractions.SequenceEqual(design.CutFractions.Distinct().Order()) ||
+                    design.Layout is {} layout && (string.IsNullOrWhiteSpace(layout.BatchId) || layout.Order<1 || layout.Order>layout.Count ||
+                    !double.IsFinite(layout.IntervalM) || layout.IntervalM<=0))
+                    throw new ArgumentException("切割线的布设参数或母线切点无效。");
+                if (alignments.Any(design.SameAlignment)) throw new ArgumentException("切割线位置重复，请核对线号。");
+                alignments.Add(design);
+            }
+        }
     }
 }

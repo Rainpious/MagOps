@@ -8,12 +8,16 @@ public sealed class TerrainSetSampler
     private readonly List<GeoTiffDemSampler> _tiles;
     public GeoTiffDemInfo Info { get; }
     public string ContentSha256 { get; }
-    public TerrainSetSampler(string path)
+    public TerrainSetSampler(string path) : this(path, path.EndsWith(".terrain.json", StringComparison.OrdinalIgnoreCase)
+        ? TerrainLibraryService.Read<TerrainSelection>(path) : null) { }
+
+    internal TerrainSetSampler(TerrainSelection selection) : this("", selection) { }
+
+    private TerrainSetSampler(string path, TerrainSelection? selection)
     {
-        if(!path.EndsWith(".terrain.json",StringComparison.OrdinalIgnoreCase)) {
+        if(selection is null) {
             var single=new GeoTiffDemSampler(path);_tiles=[single];Info=single.Info;ContentSha256=single.ContentSha256;return;
         }
-        var selection=TerrainLibraryService.Read<TerrainSelection>(path);
         if(selection.Schema!="magops-terrain-selection-1"||selection.Tiles.Count==0)throw new InvalidDataException("地形瓦片集合为空或版本无效。");
         _tiles=ResolveFiles(path,selection).Select(p=>new GeoTiffDemSampler(p)).ToList();
         foreach(var tile in _tiles)tile.ValidateForHeightCalculation();

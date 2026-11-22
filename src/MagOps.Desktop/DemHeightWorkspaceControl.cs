@@ -40,7 +40,7 @@ internal sealed class DemHeightWorkspaceControl : UserControl
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     internal string OutputDirectory { get; set; } = "";
 
-    internal DemHeightWorkspaceControl(FieldMagFolderAnalysis analysis, DemHeightOptions options, DemHeightSnapshot? snapshot)
+    internal DemHeightWorkspaceControl(FieldMagFolderAnalysis analysis, DemHeightOptions options, DemHeightSnapshot? snapshot, Action? downloadTerrain = null)
     {
         _analysis = analysis;
         Dock = DockStyle.Fill;
@@ -57,7 +57,7 @@ internal sealed class DemHeightWorkspaceControl : UserControl
         _calculate = UiComponents.Button("计算离地高度", async (_, _) => await CalculateAsync(), UiButtonRole.Primary);
         _export = UiComponents.Button("导出明细", async (_, _) => await ExportAsync());
         actions.Controls.AddRange([_calculate, _export, _automatic]);
-        actions.Controls.Add(UiComponents.Button("下载地形", (_, _) => { using var dialog = new Aw3d30DownloadDialog(); dialog.ShowDialog(this); }));
+        actions.Controls.Add(UiComponents.Button("下载地形", (_, _) => { if (downloadTerrain is not null) downloadTerrain(); else { using var dialog = new Aw3d30DownloadDialog(); dialog.ShowDialog(this); } }));
         actions.Controls.Add(UiComponents.HelpLabel("基于 DEM 的估计；不依赖分线、KML 或磁通道，不改变原始海拔和测线归属。"));
         var choose = UiComponents.Button("选择 DEM（可拖入）…", (_, _) => ChooseDem());
         foreach (var target in new Control[] { choose, _path })
@@ -229,7 +229,7 @@ internal sealed class DemHeightWorkspaceControl : UserControl
             if (!IsDisposed) { _calculate.Enabled = true; _settings.Enabled = true; _automatic.Enabled = true; }
         }
     }
-    internal void SetSnapshot(DemHeightSnapshot? snapshot)
+    internal void SetSnapshot(DemHeightSnapshot? snapshot, Action? downloadTerrain = null)
     {
         if (snapshot?.SourceFingerprint != _analysis.Fingerprint) snapshot = null;
         _snapshot = snapshot;

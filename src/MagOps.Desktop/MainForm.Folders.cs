@@ -455,6 +455,7 @@ public sealed partial class MainForm
             _routeBoundaryAdjustedSorties.Clear();
             SetRouteWorkspaceDirty(false);
 
+            _routeCoveragePlyPath = "";
             SetWorkareaContext(canonical);
         }
 
@@ -466,6 +467,8 @@ public sealed partial class MainForm
             _workareaContextLoadedRoot = Path.GetFullPath(Root);
         }
 
+        if (workareaChanged && IsProjectInitialized())
+            RefreshProject();
         if (refreshSelectors)
             RefreshWorkareaContextSelectors();
 
@@ -480,6 +483,7 @@ public sealed partial class MainForm
         ResetCoordinateWorkbenchForContextChange();
         ResetFieldOperationsContext();
         _lastGeneratedRoutePlyPath = "";
+        _routeCoveragePlyPath = "";
         _routeWorkspace.ResetForContextChange();
         _routePartitionContexts.Clear();
         _restoredSubdivisionSnapshot = null;

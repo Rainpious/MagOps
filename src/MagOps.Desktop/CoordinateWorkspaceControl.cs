@@ -16,6 +16,7 @@ internal sealed record CoordinateWorkspaceActions(
     Action ReloadProjectResult,
     Action ConvertCoordinates,
     Action UseWorkareaRange,
+    Action BindBoundary,
     Action<string?> SelectKmlTemplate,
     Action EditKmlFormat,
     Action<string> CopyCoordinateColumns,
@@ -237,7 +238,12 @@ internal sealed class CoordinateWorkspaceControl : UserControl
         _coordMode.DropDownStyle = ComboBoxStyle.DropDownList;
         _coordMode.Items.AddRange(["度分秒", "小数格式（十进制度）", "XY"]);
         _coordMode.SelectedIndex = 0;
-        _coordMode.SelectedIndexChanged += (_, _) => UpdateCoordinateModeUi();
+        _coordMode.SelectedIndexChanged += (_, _) =>
+        {
+            if (_coordMode.SelectedIndex == 1 && GetProjectionKind() == CoordinateProjectionKind.GaussKruger)
+                _coordAutoMeridian.Checked = true;
+            UpdateCoordinateModeUi();
+        };
 
         left.Controls.Add(new Label
         {
@@ -350,7 +356,7 @@ internal sealed class CoordinateWorkspaceControl : UserControl
         AddCoordinateWorkbenchField(left, row++, "中央子午线（°）", _coordCentralMeridian);
         _coordCentralMeridian.PlaceholderText = "自动或手工，如 117";
 
-        _coordAutoMeridian.Text = "经纬度输入时自动建议三度带中央子午线";
+        _coordAutoMeridian.Text = "根据经纬度自动确定三度带中央子午线";
         _coordAutoMeridian.Checked = true;
         _coordAutoMeridian.AutoSize = true;
         _coordAutoMeridian.CheckedChanged += (_, _) => UpdateCoordinateModeUi();
@@ -422,7 +428,8 @@ internal sealed class CoordinateWorkspaceControl : UserControl
             Margin = new Padding(0, 6, 0, 0)
         };
         convertActions.Controls.Add(Button("转换坐标", (_, _) => _actions.ConvertCoordinates(), UiButtonRole.Primary));
-        convertActions.Controls.Add(Button("设为当前工区范围", (_, _) => _actions.UseWorkareaRange(), UiButtonRole.Subtle));
+        convertActions.Controls.Add(Button("设为工区边界", (_, _) => _actions.BindBoundary(), UiButtonRole.Subtle));
+        convertActions.Controls.Add(Button("设为筛选矩形", (_, _) => _actions.UseWorkareaRange(), UiButtonRole.Subtle));
         left.Controls.Add(convertActions, 0, row);
         left.SetColumnSpan(convertActions, 2);
         left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -915,7 +922,7 @@ internal sealed class CoordinateWorkspaceControl : UserControl
             _coordCentralMeridian.Clear();
             _coordAutoMeridian.Checked = _coordMode.SelectedIndex != 2;
         }
-        _coordProjectionNotice.Text = gk ? "沿用原高斯三度带及项目中央经线。" : utm
+        _coordProjectionNotice.Text = gk ? "沿用原高斯三度带及工区中央经线。" : utm
             ? "经纬度输入/输出为WGS84；带号1～60须明确选择，不自动跨带。"
             : CoordinateProjectionService.RsoWarning + " 经纬度输入/输出为WGS84。";
         UpdateCoordinateModeUi();
@@ -1274,7 +1281,7 @@ internal sealed class CoordinateWorkspaceControl : UserControl
         bool value)
     {
         _coordAutoMeridian.Checked =
-            value;
+            value && GetProjectionKind() == CoordinateProjectionKind.GaussKruger && GetModeIndex() != 2;
         UpdateCoordinateModeUi();
     }
 
@@ -1314,7 +1321,7 @@ internal sealed class CoordinateWorkspaceControl : UserControl
         SetDecimalPlaces(8);
         SetIncludeZoneNumber(false);
         _coordCentralMeridian.Clear();
-        _coordAutoMeridian.Checked = true;
+        SetAutoMeridian(GetModeIndex() != 2);
         _coordInput.Clear();
         _coordResults.DataSource =
             null;

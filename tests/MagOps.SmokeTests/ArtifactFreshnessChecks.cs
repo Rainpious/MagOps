@@ -16,7 +16,7 @@ internal static class ArtifactFreshnessChecks
             var workspace = new WorkspaceService(store);
             var project = workspace.Initialize(root, "freshness-test");
             var workarea = workspace.RegisterWorkarea(root, "freshness-area");
-            workspace.ConfirmProjectCentralMeridian(root, 111, "TEST_INITIAL");
+            workspace.ConfirmWorkareaMeridian(root, workarea.Path, 111, "TEST_INITIAL");
             string output = Path.Combine(root, workarea.Path, "06_数据处理", "MagOps_处理结果__MagOps_prelevel_dtgz.csv");
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             File.WriteAllText(output, "LineName,RawMagNt\nL1,50000\n");
@@ -31,7 +31,11 @@ internal static class ArtifactFreshnessChecks
             Check(!GeneratedArtifactIdentity.Inspect(output).IsProjectSpatialReferenceStale,
                 "matching project central meridian starts current");
 
-            workspace.ConfirmProjectCentralMeridian(root, 114, "TEST_CHANGED");
+            var neighbor = workspace.RegisterWorkarea(root, "neighbor");
+            workspace.ConfirmWorkareaMeridian(root, neighbor.Path, 120, "TEST_NEIGHBOR");
+            Check(GeneratedArtifactIdentity.InspectProjectSpatialReferenceStatus(output) == "CURRENT",
+                "changing a neighboring workarea leaves this artifact current");
+            workspace.ConfirmWorkareaMeridian(root, workarea.Path, 114, "TEST_CHANGED");
             var stale = GeneratedArtifactIdentity.Inspect(output);
             Check(stale.Status == "VERIFIED" && stale.IsProjectSpatialReferenceStale &&
                   stale.Warning?.Contains("中央经线") == true,
@@ -42,7 +46,7 @@ internal static class ArtifactFreshnessChecks
             Check(artifacts.List(root).Single(x => x.Path == relative).QualityStatus == "APPROVED",
                 "freshness state does not overwrite independent manual quality assessment");
 
-            workspace.ConfirmProjectCentralMeridian(root, 111, "TEST_RESTORED");
+            workspace.ConfirmWorkareaMeridian(root, workarea.Path, 111, "TEST_RESTORED");
             Check(!GeneratedArtifactIdentity.Inspect(output).IsProjectSpatialReferenceStale,
                 "restoring the artifact's exact source meridian restores current spatial freshness");
             var restored = artifacts.RefreshProjectSpatialReferenceStatus(root);
@@ -88,7 +92,7 @@ internal static class ArtifactFreshnessChecks
                 Check(GeneratedArtifactIdentity.InspectProjectSpatialReferenceStatus(unconfirmedOutput) == "UNVERIFIED",
                     "an artifact and project both lacking a confirmed meridian must remain unverified");
 
-                unconfirmedWorkspace.ConfirmProjectCentralMeridian(unconfirmedRoot, 117, "TEST_CONFIRM_AFTER_EXPORT");
+                unconfirmedWorkspace.ConfirmWorkareaMeridian(unconfirmedRoot, unconfirmedArea.Path, 117, "TEST_CONFIRM_AFTER_EXPORT");
                 Check(GeneratedArtifactIdentity.InspectProjectSpatialReferenceStatus(unconfirmedOutput) == "STALE",
                     "confirming a meridian after an unreferenced export makes the old artifact stale");
             }

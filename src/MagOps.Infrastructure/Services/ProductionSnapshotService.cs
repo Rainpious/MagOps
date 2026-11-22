@@ -58,7 +58,7 @@ public static class ProductionSnapshotService
             var workspace = store.Read(ProjectPaths.ExistingProject(directory), new WorkspaceRecord());
             if (!workspace.ProjectId.Equals(metadata.ProjectId, StringComparison.OrdinalIgnoreCase))
                 return true;
-            string current = workspace.CentralMeridian?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "UNCONFIRMED";
+            string current = new WorkspaceService(store).SpatialFingerprint(directory, workspace, metadata.WorkareaId);
             string artifact = metadata.ProjectSpatialReferenceFingerprint;
             if (artifact.Equals("UNAVAILABLE", StringComparison.Ordinal))
                 return false;

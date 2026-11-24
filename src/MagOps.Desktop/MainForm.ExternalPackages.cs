@@ -12,6 +12,7 @@ public sealed partial class MainForm
         layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.AutoSize)); layout.RowStyles.Add(new(SizeType.Percent, 100));
         layout.Controls.Add(new Label { Text = "选取包含全部伴随文件的成果目录及声明 JSON，先预览再登记。保留原目录，完整复制到当前工区分析结果；内部引用未验证，登记不代表质量通过。", AutoSize = true, MaximumSize = new Size(1050, 0) }, 0, 0);
         var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
+        actions.Controls.Add(Button("Oasis成图", (_, _) => NavigateFeature(FeatureIds.OasisProcessing)));
         var view = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, WordWrap = false, ScrollBars = ScrollBars.Both };
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
         string input = "", declarationPath = "", registered = "";

@@ -6,7 +6,11 @@ MagOps is a Windows desktop workspace for magnetic-survey project organization, 
 
 ## 下载与运行
 
-从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.60，仍在持续开发和实机验收。
+从 [Releases](https://github.com/Rainpious/MagOps/releases) 下载 Windows x64 ZIP，完整解压后运行 `MagOps.exe`。发行包自带 .NET 运行时，无需单独安装；命令行工具位于 `cli/MagOps.Cli.exe`。当前版本为 0.9.61，仍在持续开发和实机验收。
+
+## Oasis 航磁成图
+
+进入「数据处理 → Oasis成图」，载入分线后的 dT 或 dTgz 测点 CSV，选择上延距离后生成单图、对应 KMZ 和每个高度的四联图。默认按磁场全量程、一阶和二阶垂导 P99 配色。需要本机安装具备相应处理模块与授权的 Oasis montaj。
 
 ## 切割线作业航线
 

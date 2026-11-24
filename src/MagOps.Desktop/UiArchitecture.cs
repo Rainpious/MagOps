@@ -10,6 +10,7 @@ internal static class FeatureIds
     public const string SegmentationProcessing = "processing.segmentation";
     public const string ExcelProcessing = "processing.excel";
     public const string OasisProcessing = "processing.oasis";
+    public const string ExperimentalTools = "tools.experimental";
     public const string AnalysisTools = "tools.analysis";
 
     public const string ArtifactWorkspace = "project.artifacts";
@@ -66,10 +67,11 @@ internal static class NavigationModel
         new(FeatureIds.FieldOperations, NavigationGroupIds.Field, "外业", "外业管理", 50),
         new(FeatureIds.SegmentationProcessing, NavigationGroupIds.Processing, "数据处理", "分线与处理", 55),
         new(FeatureIds.ExcelProcessing, NavigationGroupIds.Processing, "数据处理", "Excel处理", 60, Frozen: true),
-        new(FeatureIds.OasisProcessing, NavigationGroupIds.Processing, "数据处理", "Oasis处理", 70, Frozen: true),
+        new(FeatureIds.OasisProcessing, NavigationGroupIds.Processing, "数据处理", "Oasis成图", 70),
         new(FeatureIds.QualityChecks, NavigationGroupIds.Results, "成果", "质量验算", 74),
         new(FeatureIds.ReportCompilation, NavigationGroupIds.Results, "成果", "报告编写", 75),
-        new(FeatureIds.AnalysisTools, NavigationGroupIds.Tools, "工具", "分析工具", 80, Experimental: true, Frozen: true)
+        new(FeatureIds.AnalysisTools, NavigationGroupIds.Tools, "工具", "分析工具", 80, Experimental: true, Frozen: true),
+        new(FeatureIds.ExperimentalTools, NavigationGroupIds.Tools, "工具", "实验工具", 85, Experimental: true)
     ];
 
     public static NavigationFeatureDefinition Require(string featureId) =>

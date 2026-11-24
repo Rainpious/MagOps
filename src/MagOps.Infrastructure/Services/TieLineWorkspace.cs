@@ -107,7 +107,7 @@ public sealed class TieLineWorkspace
 
     public List<RouteCheckLine> ParallelLayout(int count, double interval, double bearing, double mainSpacing,
         double before, double after, string standard, string note, TieFlightBudget budget, IEnumerable<RouteCheckLine> retained,
-        double lateralShiftM = 0)
+        double lateralShiftM = 0, IReadOnlyList<RouteCheckLine?>? reuse = null)
     {
         if (count is < 1 or > 1000 || !double.IsFinite(interval) || interval <= 0)
             throw new ArgumentException("请输入 1～1000 条切割线和正的切割线距。");
@@ -122,6 +122,7 @@ public sealed class TieLineWorkspace
         double origin = anchor.X * axis.X + anchor.Y * axis.Y;
         var retainedLines = retained.ToArray();
         var names = retainedLines.Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (reuse != null) names.UnionWith(reuse.OfType<RouteCheckLine>().Select(l => l.Name));
         var added = new List<RouteCheckLine>();
         string group = Guid.NewGuid().ToString("N");
         int number = 1;
@@ -130,7 +131,8 @@ public sealed class TieLineWorkspace
             while (names.Contains($"Q{number:00}")) number++;
             double offset = start + i * interval - origin;
             var through = new P(anchor.X + axis.X * offset, anchor.Y + axis.Y * offset);
-            var line = Draw($"Q{number++:00}", through, bearing, mainSpacing, before, after);
+            var old = reuse?[i];
+            var line = Draw(old?.Name ?? $"Q{number++:00}", through, bearing, mainSpacing, before, after, old?.Id);
             if (Mains.Length > 0 && line.Design!.Crossings.Length == 0)
                 throw new InvalidDataException($"第 {i + 1} 条切割线没有交会主测线，请调整数量、方向或间距。");
             if (retainedLines.Any(l => l.Design?.SameAlignment(line.Design!) == true))
@@ -166,23 +168,52 @@ public sealed class TieLineWorkspace
             (Math.Pow(d.X-c.X,2)+Math.Pow(d.Y-c.Y,2))) ? pair : [];
     }
 
+    public RouteCheckLine[] LastCenteredBatch(IReadOnlyList<RouteCheckLine> lines)
+    {
+        var current = lines.Where(l => l.Design?.Version == Version &&
+            !string.IsNullOrEmpty(l.Design.Layout?.CenteredBatchId)).ToArray();
+        string? batch = current.LastOrDefault()?.Design?.Layout?.CenteredBatchId;
+        return current.Where(l => l.Design!.Layout!.CenteredBatchId == batch).ToArray();
+    }
+
     public List<RouteCheckLine> CreatePairs(int groups, double interval, double bearing, double mainSpacing,
         double before, double after, string standard, string note, TieFlightBudget budget,
-        IReadOnlyList<RouteCheckLine> retained, P? firstPoint = null)
+        IReadOnlyList<RouteCheckLine> retained, P? firstPoint = null, IReadOnlyList<RouteCheckLine>? replacing = null)
     {
         if (groups is < 1 or > 500) throw new ArgumentException("请输入 1～500 组，每组两条。");
         var axis = LateralRange(bearing);
         int count = groups * 2;
         double centeredFirst = (axis.Min + axis.Max - (count - 1) * interval) / 2;
         double shift = firstPoint is { } p ? p.X * axis.X + p.Y * axis.Y - centeredFirst : 0;
-        var added = ParallelLayout(count, interval, bearing, mainSpacing, before, after, standard, note, budget, retained, shift);
+        var reuse = new RouteCheckLine?[count];
+        var oldPairs = (replacing ?? []).GroupBy(l => (l.Design!.Layout!.BatchId, (l.Design.Layout.Order - 1) / 2)).Take(groups);
+        int pairIndex = 0;
+        foreach (var pair in oldPairs)
+        {
+            foreach (var old in pair) reuse[2 * pairIndex + (old.Design!.Layout!.Order - 1) % 2] = old;
+            pairIndex++;
+        }
+
+        string centeredBatch = firstPoint is not null ? "" : replacing?.FirstOrDefault()?.Design?.Layout?.CenteredBatchId ?? Guid.NewGuid().ToString("N");
+        var added = ParallelLayout(count, interval, bearing, mainSpacing, before, after, standard, note, budget, retained, shift, reuse);
         for (int n = 0; n < added.Count; n += 2)
         {
-            string pairId = Guid.NewGuid().ToString("N");
+            var priorPair = (reuse[n] ?? reuse[n + 1])?.Design?.Layout;
+            string pairId = priorPair is { Count: 2 } ? priorPair.BatchId : Guid.NewGuid().ToString("N");
             for (int k = 0; k < 2; k++)
             {
                 var line = added[n + k];
-                added[n + k] = line with { Design = line.Design! with { Layout = new(pairId, k + 1, 2, interval) { LateralShiftM = shift } } };
+                var old = reuse[n + k]?.Design;
+                var layout = new TieLayout(pairId, k + 1, 2, interval)
+                {
+                    CenteredBatchId = centeredBatch, LateralShiftM = shift,
+                    FirstMotherId = old?.Layout?.FirstMotherId, FirstLegReverse = old?.Layout?.FirstLegReverse
+                };
+                added[n + k] = line with { Design = line.Design! with
+                {
+                    Layout = layout, CutFractions = old?.CutFractions ?? [],
+                    FlightBudget = old?.FlightBudget ?? budget, DesignNote = old?.DesignNote ?? note
+                } };
             }
         }
         return added;

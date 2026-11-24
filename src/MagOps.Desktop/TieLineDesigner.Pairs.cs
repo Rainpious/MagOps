@@ -43,6 +43,8 @@ internal sealed partial class TieLineDesigner
             e.Handled = e.SuppressKeyPress = true; UpdatePreview();
         };
         groupCount.DecimalPlaces = 0;
+        var centered = context.LastCenteredBatch(lines);
+        if (centered.Length > 0) groupCount.Value = centered.Select(l => l.Design!.Layout!.BatchId).Distinct().Count();
         pairDistance.Value = (decimal)(lines.LastOrDefault(l => l.Design?.Layout != null)?.Design?.Layout?.IntervalM
             ?? (double)spacing.Value * (standard.SelectedIndex == 1 ? 20 : 10));
         perpendicular.Checked = context.Mains.Length > 0;
@@ -77,9 +79,60 @@ internal sealed partial class TieLineDesigner
     {
         var budget = lines.LastOrDefault(l => l.Design?.Version == context.Version)?.Design?.FlightBudget ?? new();
         double bearing = perpendicular.Checked ? context.Bearing : (double)azimuth.Value;
+        var replacing = through is not null ? [] : context.LastCenteredBatch(lines);
+        if (through is null && replacing.Length == 0 && SelectedLine is { Design.Layout: { CenteredBatchId: null } } legacy)
+        {
+            var pair = context.PairMembers(lines, legacy);
+            if (pair.Length == 2)
+            {
+                var choice = ReviewCentering("旧版线组未记录布设方式", pair.Select(l => l.Name),
+                    "可用当前选中的这对线重排，或保留它们并新增居中线组。", legacy: true);
+                if (choice == DialogResult.Cancel) return;
+                if (choice == DialogResult.Yes) replacing = pair;
+            }
+        }
+        var retained = lines.Except(replacing).ToList();
         var added = context.CreatePairs((int)groupCount.Value, (double)pairDistance.Value, bearing,
-            (double)spacing.Value, (double)left.Value, (double)right.Value, standard.Text, designNote.Text.Trim(), budget, lines, through);
-        Apply(lines.Concat(added).ToList(), added[0].Id);
+            (double)spacing.Value, (double)left.Value, (double)right.Value, standard.Text, designNote.Text.Trim(), budget,
+            retained, through, replacing);
+        int at = replacing.Length == 0 ? retained.Count : lines.IndexOf(replacing[0]);
+        retained.InsertRange(at, added);
+        if (replacing.Length > 0)
+        {
+            var changes = new List<string>();
+            var byId = added.ToDictionary(l => l.Id);
+            foreach (var old in replacing)
+            {
+                var design = old.Design!;
+                bool kept = byId.TryGetValue(old.Id, out var next);
+                if (kept && design.Approach == next!.Design!.Approach && design.Departure == next.Design.Departure) continue;
+                if (kept && !design.Layout!.Edited && design.CutFractions.Length == 0) continue;
+                string detail = design.CutFractions.Length == 0 ? "" : " · 切点 " +
+                    string.Join("、", design.CutFractions.Select(c => c.ToString("0.##%")));
+                changes.Add(old.Name + (kept ? " · 更新线位" : " · 移除") + detail);
+            }
+            if (changes.Count > 0 && ReviewCentering("核对居中重排", changes,
+                "保留的母线按原里程比例迁移切点，减少组数时移除列出的多余母线。") != DialogResult.Yes) return;
+        }
+        string focus = added.Any(l => l.Id == SelectedLine?.Id) ? SelectedLine!.Id : added[0].Id;
+        Apply(retained, focus);
+    }
+
+    private DialogResult ReviewCentering(string title, IEnumerable<string> details, string message, bool legacy = false)
+    {
+        using var dialog = new Form { Text = title, StartPosition = FormStartPosition.CenterParent, ClientSize = new(510, 240) };
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new(8) };
+        panel.RowStyles.Add(new(SizeType.AutoSize)); panel.RowStyles.Add(new(SizeType.Percent, 100)); panel.RowStyles.Add(new(SizeType.AutoSize));
+        panel.Controls.Add(new Label { Text = message, AutoSize = true }, 0, 0);
+        var items = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true };
+        items.Items.AddRange(details.ToArray()); panel.Controls.Add(items, 0, 1);
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
+        actions.Controls.Add(new Button { Text = legacy ? "重排选中线组" : "应用重排", DialogResult = DialogResult.Yes, AutoSize = true });
+        if (legacy) actions.Controls.Add(new Button { Text = "保留并新增", DialogResult = DialogResult.No, AutoSize = true });
+        var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, AutoSize = true };
+        actions.Controls.Add(cancel); dialog.CancelButton = dialog.AcceptButton = cancel;
+        panel.Controls.Add(actions, 0, 2); dialog.Controls.Add(panel);
+        return dialog.ShowDialog(this);
     }
 
     private (RouteCheckLine Anchor, RouteCheckLine Other, double Gap) Selection()

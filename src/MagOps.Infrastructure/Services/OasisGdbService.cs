@@ -58,7 +58,7 @@ public sealed class OasisGdbService
 
         throw new InvalidOperationException(
             "未检测到可用的 Oasis/Geosoft Python 环境。\r\n" +
-            "请在 Oasis montaj 的 Python 设置中确认当前 Python 环境，然后在 MagOps 的 Oasis处理页选择同一个 python.exe。\r\n" +
+            "请在 Oasis montaj 的 Python 设置中确认当前 Python 环境，然后在 MagOps 的实验工具页选择同一个 python.exe。\r\n" +
             "已检查：" + string.Join("；", checkedCandidates));
     }
 

@@ -5,7 +5,7 @@ namespace MagOps.Desktop;
 
 public sealed partial class MainForm
 {
-    private void BuildOasisTab()
+    private void BuildExperimentalToolsTab()
     {
         _oasisGdbA.AccessibleName = "基准 GDB A 路径";
         _oasisGdbB.AccessibleName = "追加 GDB B 路径";
@@ -13,16 +13,15 @@ public sealed partial class MainForm
         _oasisOutputName.AccessibleName = "合并 GDB 成果文件名";
         _oasisHeaderGrid.AccessibleName = "Oasis 表头对应";
         _oasisInfo.AccessibleName = "Oasis 处理说明与结果";
-        var page = new TabPage("Oasis处理") { Padding = Padding.Empty };
+        var page = new TabPage("实验工具") { Padding = Padding.Empty };
         var shell = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 2,
             Padding = new Padding(8),
             Margin = Padding.Empty
         };
-        shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -142,14 +141,14 @@ public sealed partial class MainForm
                 "输入 GDB 不会原地修改，结果始终写入新的 .gdb。";
 
         mergeBox.Controls.Add(form);
-        shell.Controls.Add(mergeBox, 0, 1);
+        shell.Controls.Add(mergeBox, 0, 0);
 
         GridFactory.SetEmptyText(_oasisHeaderGrid, "读取两个 GDB 后，这里显示自动匹配、占位列匹配和用户选择的表头对应关系。");
         var results = new TabControl { Dock = DockStyle.Fill };
         var headers = new TabPage("表头对应");
         headers.Controls.Add(_oasisHeaderGrid);
         results.TabPages.Add(headers);
-        shell.Controls.Add(results, 0, 2);
+        shell.Controls.Add(results, 0, 1);
 
         _oasisInfo.Multiline = true;
         _oasisInfo.ReadOnly = true;
@@ -166,7 +165,7 @@ public sealed partial class MainForm
         page.Controls.Add(shell);
         _oasisGdbA.TextChanged += (_, _) => InvalidateOasisInspection();
         _oasisGdbB.TextChanged += (_, _) => InvalidateOasisInspection();
-        RegisterFeaturePage(FeatureIds.OasisProcessing, page);
+        RegisterFeaturePage(FeatureIds.ExperimentalTools, page);
     }
 
     private static bool AcceptOasisGdb(string path) =>

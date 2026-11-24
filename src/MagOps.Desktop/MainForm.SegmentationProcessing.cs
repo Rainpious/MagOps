@@ -104,6 +104,7 @@ public sealed partial class MainForm
             "生成处理用 CSV", "正在按右侧航段选择核对日变、IGRF、T0、dTgz 和投影坐标…",
             ExportNativeDiurnalFieldData), UiButtonRole.Primary);
         outputActions.Controls.Add(export); _rawProcessingActions.Add(export);
+        outputActions.Controls.Add(Button("Oasis成图", (_, _) => NavigateFeature(FeatureIds.OasisProcessing)));
         _processingCsvExport = Button("导出空间分线 CSV", (_, _) => RunUi("导出空间分线 CSV", () => ExportCurrentIntermediateCsv(true)), UiButtonRole.Primary);
         outputActions.Controls.Add(_processingCsvExport);
         _processingIdleActions.ColumnStyles.Add(new(SizeType.Percent, 100));

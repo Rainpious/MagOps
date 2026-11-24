@@ -2762,6 +2762,12 @@ public sealed partial class MainForm
             return;
         }
 
+        if (!result.AuditProduction.IsReviewDraft)
+        {
+            _latestOasisExport = Path.GetFullPath(result.ProcessingCsvPath);
+            _oasisInputIsManual = false;
+        }
+
         int totalUncorrected =
             result.Correction.UncorrectedCount +
             result.ExcludedRoverRecords;

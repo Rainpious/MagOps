@@ -27,3 +27,7 @@ KML, DJI and Ovi references identify interoperability targets, not affiliation o
 ## Word report components
 
 Word report generation uses the MIT-licensed Open XML SDK, DocxTemplater, Dynamic Expresso and System.IO.Packaging. See the NuGet lockfile for versions and the licenses directory in the binary distribution for the notices.
+
+## ColorBrewer
+
+The magnetic map palette uses the reversed RdBu scheme by Cynthia A. Brewer, Mark Harrower and The Pennsylvania State University. See [ColorBrewer](https://colorbrewer2.org/) and [the original license](licenses/colorbrewer-LICENSE.txt).

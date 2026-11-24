@@ -10,6 +10,8 @@ public sealed record TieLayout(string BatchId, int Order, int Count, double Inte
     public string? FirstMotherId { get; init; }
     public bool? FirstLegReverse { get; init; }
     public double LateralShiftM { get; init; }
+    // Null for older files, empty for a map placement, shared across the pairs of a centered layout.
+    public string? CenteredBatchId { get; init; }
 }
 
 public sealed record TieFlightBudget(double SpeedMps = 10, double AvailableMinutes = 0, double AccessAllowanceM = 0)

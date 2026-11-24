@@ -44,6 +44,7 @@ internal static partial class Program
             ("DMS auto-detect overrides stale decimal mode", TestDmsAutoDetectOverridesStaleDecimalMode),
             ("Gauss-Kruger roundtrip", TestGaussKrugerRoundtrip),
             ("Coordinate axis semantics", TestCoordinateAxisOrder),
+            ("Oasis automatic, full and locked map scales", TestOasisMapScales),
             ("IGRF Oasis coefficient-file parse", TestIgrfOasisCoefficientFile),
             ("IGRF embedded baseline and reversible configuration update", TestIgrfConfigurationService),
             ("IGRF spherical-harmonic synthesis", TestIgrfSphericalHarmonicSynthesis),
@@ -468,6 +469,23 @@ internal static partial class Program
             includeZoneNumber: true);
         Equal(precision.Northing, zonedSurvey.X, 1e-8);
         Equal(zonedEasting, zonedSurvey.Y, 1e-8);
+    }
+
+    private static void TestOasisMapScales()
+    {
+        var auto = new OasisMapScale();
+        float[] sample = Enumerable.Repeat(-2f, 100).Append(1000f).Append(float.NaN).ToArray();
+        True(auto.Candidate(sample, "nT/m") == 2 && auto.Candidate(sample, "nT") == 1000,
+            "Derivatives use absolute P99 on valid cells, field uses the maximum");
+        True(Math.Abs(auto.Candidate([-4f, 10f], "nT/m") - 9.94) < 1e-9,
+            "P99 interpolates adjacent order statistics");
+        True(Math.Abs(auto.FinalLimit(.1759) - .18) < 1e-12 && auto.FinalLimit(550.08) == 600 &&
+            auto.FinalLimit(0) == 1, "Round outward and handle zero fields");
+        var full = new OasisMapScale(OasisScaleMode.Full);
+        True(full.Candidate(sample, "nT/m") == 1000, "Full scale preserves derivative peaks");
+        var locked = new OasisMapScale(OasisScaleMode.Locked, 455, 2.55, .037);
+        locked.Validate();
+        True(locked.FinalLimit(locked.Candidate(sample, "nT/m")) == 2.55, "Manual limits retain precision");
     }
 
     private static void TestIgrfOasisCoefficientFile()

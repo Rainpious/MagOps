@@ -620,8 +620,9 @@ public sealed partial class MainForm : Form
         BuildReportTab();
         BuildQualityCheckTab();
         BuildExcelTab();
-        BuildOasisTab();
+        BuildOasisMapTab();
         BuildAnalysisTab();
+        BuildExperimentalToolsTab();
         UiTheme.Apply(this);
 
         Shown += (_, _) =>
